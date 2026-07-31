@@ -6,3 +6,4 @@
 - Confirmed `.env` must keep that exact filename (not `xxx.env`); restarted the Vite dev server after keys were filled in.
 - Tightened intro screen: controls in a fixed 3×2 grid so Multiplier stays aligned; sector leaders panel bordered/separated with centered empty state.
 - Removed personal-best line from the intro screen footer.
+- Removed the B bloom toggle and its UI/docs mentions (glow still auto-applies on desktop).

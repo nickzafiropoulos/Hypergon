@@ -147,10 +147,6 @@ export class Game {
         const m = toggleMute();
         this.toast(m ? 'MUTED' : 'SOUND ON', '', 420);
       },
-      onBloom: () => {
-        this.bloomOn = !this.bloomOn;
-        this.toast(this.bloomOn ? 'BLOOM ON' : 'BLOOM OFF', '', 420);
-      },
       onAutofire: () => {
         this.toast(
           this.input.autofire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF',

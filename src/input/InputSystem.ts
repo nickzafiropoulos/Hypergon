@@ -9,7 +9,6 @@ export type StickState = {
 export type InputCallbacks = {
   onPause: () => void;
   onMute: () => void;
-  onBloom: () => void;
   onAutofire: () => void;
   onCycleWeapon: (dir: number) => void;
   onBomb: () => void;
@@ -60,7 +59,6 @@ export class InputSystem {
 
       if (e.code === 'KeyP' || e.code === 'Escape') this.cbs.onPause();
       if (e.code === 'KeyM') this.cbs.onMute();
-      if (e.code === 'KeyB') this.cbs.onBloom();
       if (e.code === 'KeyF') {
         this.autofire = !this.autofire;
         this.cbs.onAutofire();
