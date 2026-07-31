@@ -784,7 +784,8 @@ export class Game {
       this.grid.impulse(this.player.x, this.player.y, 4, 170);
     }
     this.player.thrust = Math.min(1, sp / 420);
-    this.grid.impulse(this.player.x, this.player.y, -0.45 - this.player.thrust * 0.7, 130);
+    // Soft ship wake — strong wells made the grid hard to read around the player.
+    this.grid.impulse(this.player.x, this.player.y, -0.1 - this.player.thrust * 0.14, 78);
     if (this.player.invuln > 0) this.player.invuln -= dt;
 
     const [ax, ay] = norm(st.ax || 1, st.ay || 0);
@@ -1659,8 +1660,8 @@ export class Game {
     if (this.shake > 0.2) ctx.translate(rnd(this.shake, -this.shake), rnd(this.shake, -this.shake));
 
     this.grid.draw(ctx, {
-      fx: this.player.x,
-      fy: this.player.y,
+      fx: lerp(this.W * 0.5, this.player.x, 0.28),
+      fy: lerp(this.H * 0.5, this.player.y, 0.28),
       t: this.gameT,
     });
     ctx.beginPath();

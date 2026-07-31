@@ -151,19 +151,19 @@ export class WarpGrid {
     const cy = view?.fy ?? this.H * 0.5;
     const t = view?.t ?? 0;
     const radius = Math.hypot(this.W, this.H) * 0.55 || 1;
-    const strength = this.reduced ? 0 : 0.1;
+    const strength = this.reduced ? 0 : 0.045;
 
     if (strength > 0) {
-      const driftX = Math.sin(t * 0.37) * 7;
-      const driftY = Math.cos(t * 0.29) * 5;
+      const driftX = Math.sin(t * 0.37) * 4;
+      const driftY = Math.cos(t * 0.29) * 3;
       this.strokeLayer(
         ctx,
         cx + driftX,
         cy + driftY,
         radius,
-        strength * 1.65,
-        'rgba(36,52,110,.2)',
-        0.7,
+        strength * 1.4,
+        'rgba(36,52,110,.14)',
+        0.65,
         false,
       );
     }
@@ -174,7 +174,7 @@ export class WarpGrid {
       cy,
       radius,
       strength,
-      'rgba(58,84,158,.42)',
+      'rgba(58,84,158,.34)',
       1,
       true,
     );
@@ -206,7 +206,7 @@ export class WarpGrid {
             Math.abs(q.x - q.ax) +
             Math.abs(p.y - p.ay) +
             Math.abs(q.y - q.ay);
-          if (withHot && s > 16) {
+          if (withHot && s > 28) {
             hot.push(a.x, a.y, b.x, b.y, (a.depth + b.depth) * 0.5);
           } else {
             ctx.moveTo(a.x, a.y);
@@ -221,7 +221,7 @@ export class WarpGrid {
             Math.abs(q.x - q.ax) +
             Math.abs(p.y - p.ay) +
             Math.abs(q.y - q.ay);
-          if (withHot && s > 16) {
+          if (withHot && s > 28) {
             hot.push(a.x, a.y, b.x, b.y, (a.depth + b.depth) * 0.5);
           } else {
             ctx.moveTo(a.x, a.y);
@@ -239,8 +239,8 @@ export class WarpGrid {
       ctx.moveTo(hot[i]!, hot[i + 1]!);
       ctx.lineTo(hot[i + 2]!, hot[i + 3]!);
     }
-    ctx.strokeStyle = 'rgba(126,196,255,.85)';
-    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(126,196,255,.45)';
+    ctx.lineWidth = 1.15;
     ctx.stroke();
 
     // Nearer hot segments get a slightly brighter pass (cheap depth cue).
@@ -254,8 +254,8 @@ export class WarpGrid {
       any = true;
     }
     if (any) {
-      ctx.strokeStyle = 'rgba(180,230,255,.55)';
-      ctx.lineWidth = 1.85;
+      ctx.strokeStyle = 'rgba(180,230,255,.28)';
+      ctx.lineWidth = 1.4;
       ctx.stroke();
     }
   }
