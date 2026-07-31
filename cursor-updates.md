@@ -14,3 +14,4 @@
 - Restyled Sector Leaders title to match the logo glyph and refined the leaderboard panel separation.
 - Advised keeping gameplay on Canvas 2D; Three.js only as an optional decorative underlay (or fake depth in the warp grid) to avoid a full rewrite and perf hit.
 - Removed dashed empty-state box on Sector Leaders, swapped UI emdashes for hyphens, and bumped landing panel body type one step.
+- Matched Sector Leaders panel width to the instructions grid above it.
