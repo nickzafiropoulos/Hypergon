@@ -74,6 +74,8 @@ export type Particle = {
   col: string;
   size: number;
   drag: number;
+  /** 0 near → 1 far; used for subtle size/alpha depth. */
+  z?: number;
 };
 
 export type Gem = {

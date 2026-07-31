@@ -13,5 +13,6 @@
 - First multiplier core of a run shows a short on-world hint to collect them.
 - Restyled Sector Leaders title to match the logo glyph and refined the leaderboard panel separation.
 - Advised keeping gameplay on Canvas 2D; Three.js only as an optional decorative underlay (or fake depth in the warp grid) to avoid a full rewrite and perf hit.
+- Added Canvas 2D fake depth: bowl-projected warp grid with parallax ghost layer, particle z-scaling, and elliptical ring squash (disabled under reduced motion).
 - Removed dashed empty-state box on Sector Leaders, swapped UI emdashes for hyphens, and bumped landing panel body type one step.
 - Matched Sector Leaders panel width to the instructions grid above it.

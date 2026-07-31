@@ -14,6 +14,7 @@ import {
 } from './catalogue';
 import { resumeAudio, SFX, tone, toggleMute, isMuted } from './audio';
 import { WarpGrid } from './grid';
+import { depthScale } from './depth';
 import { angDiff, clamp, len, lerp, norm, pick, rnd, TAU } from './maths';
 import { pushParticle, ringFx, spark } from './particles';
 import type {
@@ -106,6 +107,7 @@ export class Game {
   usedAutofire = false;
   gemHintShown = false;
   gemHint: { gem: Gem; life: number; max: number; x: number; y: number } | null = null;
+  attractT = 0;
 
   player: Player = { x: 0, y: 0, vx: 0, vy: 0, ang: 0, r: 12, invuln: 0, thrust: 0 };
 
@@ -1618,7 +1620,11 @@ export class Game {
     ctx.save();
     if (this.shake > 0.2) ctx.translate(rnd(this.shake, -this.shake), rnd(this.shake, -this.shake));
 
-    this.grid.draw(ctx);
+    this.grid.draw(ctx, {
+      fx: this.player.x,
+      fy: this.player.y,
+      t: this.gameT,
+    });
     ctx.beginPath();
     ctx.rect(2, 2, this.W - 4, this.H - 4);
     ctx.strokeStyle = 'rgba(99,247,255,.28)';
@@ -1629,8 +1635,12 @@ export class Game {
 
     for (const r of this.rings) {
       const t = 1 - r.life / r.max;
+      const rad = lerp(r.r, r.r1, t * t);
+      const squash = this.reducedMotion
+        ? 1
+        : 0.84 + 0.16 * (1 - Math.abs(r.y - this.H * 0.5) / (this.H * 0.5 + 1));
       ctx.beginPath();
-      ctx.arc(r.x, r.y, lerp(r.r, r.r1, t * t), 0, TAU);
+      ctx.ellipse(r.x, r.y, rad, rad * squash, 0, 0, TAU);
       ctx.strokeStyle = r.col;
       ctx.globalAlpha = (1 - t) * 0.8;
       ctx.lineWidth = lerp(5, 0.6, t);
@@ -1664,12 +1674,15 @@ export class Game {
 
     for (const p of this.parts) {
       const t = p.life / p.max;
-      ctx.globalAlpha = clamp(t, 0, 1) * 0.95;
+      const z = this.reducedMotion ? 0.5 : (p.z ?? 0.45);
+      const ds = depthScale(z);
+      ctx.globalAlpha = clamp(t, 0, 1) * lerp(0.55, 0.95, 1 - z);
       ctx.strokeStyle = p.col;
-      ctx.lineWidth = p.size * t + 0.4;
+      ctx.lineWidth = (p.size * t + 0.4) * ds;
+      const trail = 0.016 * ds;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
-      ctx.lineTo(p.x - p.vx * 0.016, p.y - p.vy * 0.016);
+      ctx.lineTo(p.x - p.vx * trail, p.y - p.vy * trail);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -1749,13 +1762,16 @@ export class Game {
   }
 
   renderAttract(dt: number): void {
+    this.attractT += dt;
     if (Math.random() < 0.05) this.grid.impulse(rnd(this.W), rnd(this.H), rnd(-7, -2), rnd(360, 200));
     this.grid.update(dt);
     const ctx = this.ctx;
     ctx.setTransform(this.DPR, 0, 0, this.DPR, 0, 0);
     ctx.fillStyle = '#05060f';
     ctx.fillRect(0, 0, this.W, this.H);
-    this.grid.draw(ctx);
+    const fx = this.W * 0.5 + Math.sin(this.attractT * 0.35) * this.W * 0.14;
+    const fy = this.H * 0.5 + Math.cos(this.attractT * 0.28) * this.H * 0.1;
+    this.grid.draw(ctx, { fx, fy, t: this.attractT });
     if (this.bloomOn) {
       this.bctx.setTransform(1, 0, 0, 1, 0, 0);
       this.bctx.clearRect(0, 0, this.bloomC.width, this.bloomC.height);

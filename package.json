@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "tsx src/leaderboard/profanity.selftest.ts"
+    "test": "tsx src/leaderboard/profanity.selftest.ts && tsx src/game/depth.selftest.ts"
   },
   "devDependencies": {
     "tsx": "^4.23.1",

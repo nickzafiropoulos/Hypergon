@@ -27,6 +27,7 @@ export function spark(
       col,
       size,
       drag: 0.965,
+      z: rnd(0.85, 0.12),
     });
   }
 }

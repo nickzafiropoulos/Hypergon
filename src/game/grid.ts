@@ -1,3 +1,5 @@
+import { projectBowl } from './depth';
+
 export type GridPoint = {
   ax: number;
   ay: number;
@@ -7,16 +9,26 @@ export type GridPoint = {
   vy: number;
 };
 
+export type GridView = {
+  fx: number;
+  fy: number;
+  t?: number;
+};
+
 export class WarpGrid {
   gap = 42;
   cols = 0;
   rows = 0;
+  W = 0;
+  H = 0;
   points: GridPoint[] = [];
   private active = false;
   private idleFrames = 0;
   reduced = false;
 
   build(W: number, H: number): void {
+    this.W = W;
+    this.H = H;
     this.gap = this.reduced || Math.min(W, H) < 700 ? 52 : 42;
     this.cols = Math.ceil(W / this.gap) + 2;
     this.rows = Math.ceil(H / this.gap) + 2;
@@ -134,52 +146,116 @@ export class WarpGrid {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D): void {
-    ctx.lineWidth = 1;
+  draw(ctx: CanvasRenderingContext2D, view?: GridView): void {
+    const cx = view?.fx ?? this.W * 0.5;
+    const cy = view?.fy ?? this.H * 0.5;
+    const t = view?.t ?? 0;
+    const radius = Math.hypot(this.W, this.H) * 0.55 || 1;
+    const strength = this.reduced ? 0 : 0.1;
+
+    if (strength > 0) {
+      const driftX = Math.sin(t * 0.37) * 7;
+      const driftY = Math.cos(t * 0.29) * 5;
+      this.strokeLayer(
+        ctx,
+        cx + driftX,
+        cy + driftY,
+        radius,
+        strength * 1.65,
+        'rgba(36,52,110,.2)',
+        0.7,
+        false,
+      );
+    }
+
+    this.strokeLayer(
+      ctx,
+      cx,
+      cy,
+      radius,
+      strength,
+      'rgba(58,84,158,.42)',
+      1,
+      true,
+    );
+  }
+
+  private strokeLayer(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    radius: number,
+    strength: number,
+    coldCol: string,
+    lineW: number,
+    withHot: boolean,
+  ): void {
+    ctx.lineWidth = lineW;
     ctx.beginPath();
-    const hot: GridPoint[] = [];
+    const hot: number[] = [];
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const i = r * this.cols + c;
         const p = this.points[i]!;
+        const a = projectBowl(p.x, p.y, cx, cy, radius, strength);
         if (c < this.cols - 1) {
           const q = this.points[i + 1]!;
+          const b = projectBowl(q.x, q.y, cx, cy, radius, strength);
           const s =
             Math.abs(p.x - p.ax) +
             Math.abs(q.x - q.ax) +
             Math.abs(p.y - p.ay) +
             Math.abs(q.y - q.ay);
-          if (s > 16) hot.push(p, q);
-          else {
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(q.x, q.y);
+          if (withHot && s > 16) {
+            hot.push(a.x, a.y, b.x, b.y, (a.depth + b.depth) * 0.5);
+          } else {
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
           }
         }
         if (r < this.rows - 1) {
           const q = this.points[i + this.cols]!;
+          const b = projectBowl(q.x, q.y, cx, cy, radius, strength);
           const s =
             Math.abs(p.x - p.ax) +
             Math.abs(q.x - q.ax) +
             Math.abs(p.y - p.ay) +
             Math.abs(q.y - q.ay);
-          if (s > 16) hot.push(p, q);
-          else {
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(q.x, q.y);
+          if (withHot && s > 16) {
+            hot.push(a.x, a.y, b.x, b.y, (a.depth + b.depth) * 0.5);
+          } else {
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
           }
         }
       }
     }
-    ctx.strokeStyle = 'rgba(58,84,158,.42)';
+    ctx.strokeStyle = coldCol;
     ctx.stroke();
-    if (hot.length) {
-      ctx.beginPath();
-      for (let i = 0; i < hot.length; i += 2) {
-        ctx.moveTo(hot[i]!.x, hot[i]!.y);
-        ctx.lineTo(hot[i + 1]!.x, hot[i + 1]!.y);
-      }
-      ctx.strokeStyle = 'rgba(126,196,255,.85)';
-      ctx.lineWidth = 1.4;
+
+    if (!withHot || !hot.length) return;
+    ctx.beginPath();
+    for (let i = 0; i < hot.length; i += 5) {
+      ctx.moveTo(hot[i]!, hot[i + 1]!);
+      ctx.lineTo(hot[i + 2]!, hot[i + 3]!);
+    }
+    ctx.strokeStyle = 'rgba(126,196,255,.85)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    // Nearer hot segments get a slightly brighter pass (cheap depth cue).
+    if (this.reduced) return;
+    ctx.beginPath();
+    let any = false;
+    for (let i = 0; i < hot.length; i += 5) {
+      if ((hot[i + 4] ?? 1) > 0.35) continue;
+      ctx.moveTo(hot[i]!, hot[i + 1]!);
+      ctx.lineTo(hot[i + 2]!, hot[i + 3]!);
+      any = true;
+    }
+    if (any) {
+      ctx.strokeStyle = 'rgba(180,230,255,.55)';
+      ctx.lineWidth = 1.85;
       ctx.stroke();
     }
   }
