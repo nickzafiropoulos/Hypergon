@@ -305,9 +305,15 @@ canvas {
   gap: 12px;
   margin-top: 4px;
 }
+.cta-stack .cta {
+  box-sizing: border-box;
+  width: min(17.5rem, 86vw);
+  text-align: center;
+  letter-spacing: 0.16em;
+  padding: 14px 16px;
+}
 .cta-stack .cta.secondary {
-  letter-spacing: 0.18em;
-  padding: 12px 28px;
+  padding: 14px 16px;
 }
 .fine {
   margin-top: 20px;

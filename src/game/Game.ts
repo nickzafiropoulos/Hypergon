@@ -30,6 +30,7 @@ import type {
   Player,
   RailFlash,
   Ring,
+  ScorePop,
 } from './types';
 import { InputSystem } from '../input/InputSystem';
 
@@ -77,6 +78,7 @@ export class Game {
   bolts: Bolt[] = [];
   rings: Ring[] = [];
   railFlashes: RailFlash[] = [];
+  scorePops: ScorePop[] = [];
 
   score = 0;
   best = loadBest();
@@ -201,6 +203,7 @@ export class Game {
     this.bolts.length = 0;
     this.rings.length = 0;
     this.railFlashes.length = 0;
+    this.scorePops.length = 0;
     this.score = 0;
     this.mult = 1;
     this.lives = 3;
@@ -518,8 +521,10 @@ export class Game {
     if (e.dead) return;
     e.dead = true;
     const t = ETYPE[e.type];
-    this.score += t.score * this.mult;
+    const gained = t.score * this.mult;
+    this.score += gained;
     this.kills++;
+    this.pushScorePop(e.x, e.y, gained, e.col);
     spark(
       this.parts,
       e.x,
@@ -1289,9 +1294,47 @@ export class Game {
       f.life -= dt;
       if (f.life <= 0) this.railFlashes.splice(i, 1);
     }
+    for (let i = this.scorePops.length - 1; i >= 0; i--) {
+      const s = this.scorePops[i]!;
+      s.life -= dt;
+      if (s.life <= 0) {
+        this.scorePops.splice(i, 1);
+        continue;
+      }
+      if (!this.reducedMotion) s.y -= 22 * dt;
+    }
+  }
+
+  private pushScorePop(x: number, y: number, value: number, col: string): void {
+    if (value <= 0) return;
+    if (this.scorePops.length >= 36) this.scorePops.splice(0, 8);
+    this.scorePops.push({ x, y: y - 10, value, col, life: 1, max: 1 });
   }
 
   // ---- drawing ----
+  private drawScorePops(): void {
+    const ctx = this.ctx;
+    for (const s of this.scorePops) {
+      const t = clamp(s.life / s.max, 0, 1);
+      const fade = t > 0.25 ? 1 : t / 0.25;
+      ctx.save();
+      ctx.globalAlpha = fade * 0.95;
+      ctx.font = '700 15px Chakra Petch, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#e8fbff';
+      ctx.strokeStyle = s.col;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = s.col;
+      ctx.shadowBlur = this.reducedMotion ? 0 : 10;
+      const label = '+' + s.value.toLocaleString('en-GB');
+      ctx.strokeText(label, s.x, s.y);
+      ctx.shadowBlur = 0;
+      ctx.fillText(label, s.x, s.y);
+      ctx.restore();
+    }
+  }
+
   private drawRailLaser(x0: number, y0: number, x1: number, y1: number, a = 1): void {
     const ctx = this.ctx;
     ctx.save();
@@ -1799,6 +1842,7 @@ export class Game {
     this.drawPlayer();
     this.drawAimTracer();
     ctx.globalCompositeOperation = 'source-over';
+    this.drawScorePops();
     ctx.restore();
 
     if (this.bloomOn) {

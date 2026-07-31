@@ -127,3 +127,13 @@ export type RailFlash = {
   life: number;
   max: number;
 };
+
+/** Floating +score readout over a killed enemy. */
+export type ScorePop = {
+  x: number;
+  y: number;
+  value: number;
+  col: string;
+  life: number;
+  max: number;
+};
