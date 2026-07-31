@@ -39,27 +39,39 @@ You do **not** create the table by hand in the UI. You paste one SQL file and Su
 
 Optional check: left sidebar → **Table Editor** → you should see **`scores`**.
 
-### 3. Copy your API keys into the game
+### 3. Give the game your Supabase keys (the `.env` file)
 
-1. Left sidebar → **Project Settings** (gear) → **API**.
-2. Copy **Project URL**.
-3. Copy the **anon** / **public** key (not the `service_role` key — keep that secret).
-4. In this project folder, copy the example env file:
+**What is `.env`?**  
+A plain text file sitting in your Hypergon project folder (same place as `package.json`). The game reads your Supabase URL and key from it when you run locally. It is **not** uploaded to GitHub (it’s in `.gitignore`), so your keys stay on your machine.
 
-```bash
-cp .env.example .env
-```
+There is already a file called **`.env`** in this project. Open it in Cursor (it may be hidden in the file tree — use **File → Open** or the search bar and type `.env`).
 
-5. Edit `.env` so it looks like:
+It currently looks like this:
 
 ```
-VITE_SUPABASE_URL=https://abcdefgh.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...your-anon-key...
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key
 ```
 
-6. Restart the dev server (`Ctrl+C`, then `npm run dev`).
+**Fill it in:**
 
-Without `.env`, the game still works — only the shared leaderboard stays offline (local best score still saves in the browser).
+1. In Supabase: left sidebar → **Project Settings** (gear icon) → **API**.
+2. Under **Project URL**, copy the URL (looks like `https://xxxxx.supabase.co`).
+3. Paste it over `https://YOUR_PROJECT.supabase.co` in `.env`.
+4. Under **Project API keys**, copy the **`anon` `public`** key (long string starting with `eyJ...`).  
+   Do **not** copy `service_role`.
+5. Paste that over `your_anon_key` in `.env`.
+6. Save the file.
+7. Restart the game server: stop it with Ctrl+C in the terminal, then run `npm run dev` again.
+
+Example of a filled-in `.env` (fake values):
+
+```
+VITE_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example
+```
+
+Without those real values, the game still runs — only the shared online leaderboard stays offline (your personal best still saves in the browser).
 
 Callsigns are filtered in the game (length, characters, simple swear filter).
 
