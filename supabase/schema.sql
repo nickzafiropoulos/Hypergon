@@ -1,5 +1,10 @@
 -- Hypergon leaderboard schema
--- Run in Supabase SQL editor, then enable RLS policies below.
+--
+-- HOW TO RUN (Supabase dashboard):
+--   1. Open your project → SQL Editor → New query
+--   2. Paste this whole file
+--   3. Click Run
+-- That creates the "scores" table + read/insert policies. No manual table setup needed.
 
 create table if not exists public.scores (
   id uuid primary key default gen_random_uuid(),
