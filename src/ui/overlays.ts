@@ -13,7 +13,7 @@ function escapeHtml(s: string): string {
 function boardHtml(rows: ScoreRow[]): string {
   if (!rows.length) {
     const msg = isLeaderboardConfigured()
-      ? 'No scores yet — be the first.'
+      ? 'No scores yet - be the first.'
       : 'Leaderboard not configured.';
     return `<p class="board-empty">${msg}</p>`;
   }
@@ -59,7 +59,7 @@ export class Overlays {
       <div class="keys">
         <div class="key"><b>MOVE</b><span>Arrow keys &nbsp;/&nbsp; WASD &nbsp;/&nbsp; left stick</span></div>
         <div class="key"><b>AIM &amp; FIRE</b><span>Mouse position + hold click &nbsp;/&nbsp; right stick. F locks auto-fire.</span></div>
-        <div class="key"><b>SHOCKWAVE</b><span>Space or right-click — clears the board</span></div>
+        <div class="key"><b>SHOCKWAVE</b><span>Space or right-click - clears the board</span></div>
         <div class="key"><b>SWAP WEAPON</b><span>Q / E through anything you're carrying</span></div>
         <div class="key"><b>PICKUPS</b><span>Hexagons are weapons. Stars are powers.</span></div>
         <div class="key"><b>MULTIPLIER</b><span>Cyan cores raise it. Dying resets it.</span></div>

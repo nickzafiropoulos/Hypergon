@@ -50,7 +50,7 @@ export async function submitScore(input: {
   if (input.score <= 0) return { ok: false, reason: 'Score must be positive.' };
 
   const sb = getClient();
-  if (!sb) return { ok: false, reason: 'Leaderboard offline — score saved locally only.' };
+  if (!sb) return { ok: false, reason: 'Leaderboard offline - score saved locally only.' };
 
   const { error } = await sb.from('scores').insert({
     name: check.name,
@@ -59,6 +59,6 @@ export async function submitScore(input: {
     kills: Math.floor(input.kills),
     autofire: !!input.autofire,
   });
-  if (error) return { ok: false, reason: 'Could not submit — try again.' };
+  if (error) return { ok: false, reason: 'Could not submit - try again.' };
   return { ok: true };
 }

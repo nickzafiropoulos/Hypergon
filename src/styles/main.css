@@ -254,20 +254,20 @@ canvas {
 }
 .key b {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.18em;
   color: var(--ion);
   margin-bottom: 3px;
   font-weight: 600;
 }
 .key span {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ash);
   line-height: 1.45;
 }
 .cta {
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.32em;
   text-transform: uppercase;
@@ -300,7 +300,7 @@ canvas {
 }
 .fine {
   margin-top: 20px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.24em;
   color: rgba(240, 248, 255, 0.32);
   text-transform: uppercase;
@@ -344,12 +344,10 @@ canvas {
   margin: 0;
   padding: 28px 16px 24px;
   text-align: center;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.28em;
   color: rgba(240, 248, 255, 0.4);
   text-transform: uppercase;
-  border: 1px dashed rgba(99, 247, 255, 0.18);
-  background: rgba(0, 0, 0, 0.22);
 }
 .board {
   list-style: none;
@@ -365,7 +363,7 @@ canvas {
   align-items: center;
   padding: 11px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.1em;
 }
 .board li:nth-child(odd) {

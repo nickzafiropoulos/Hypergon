@@ -12,3 +12,5 @@
 - Removed the twin-stick tagline from the landing screen.
 - First multiplier core of a run shows a short on-world hint to collect them.
 - Restyled Sector Leaders title to match the logo glyph and refined the leaderboard panel separation.
+- Advised keeping gameplay on Canvas 2D; Three.js only as an optional decorative underlay (or fake depth in the warp grid) to avoid a full rewrite and perf hit.
+- Removed dashed empty-state box on Sector Leaders, swapped UI emdashes for hyphens, and bumped landing panel body type one step.
