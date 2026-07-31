@@ -1487,6 +1487,66 @@ export class Game {
     }
   }
 
+  /** Subtle dashed aim tracer: ship → mouse (or stick aim on touch). */
+  private drawAimTracer(): void {
+    if (this.state !== 'play' && this.state !== 'paused') return;
+    const ctx = this.ctx;
+    const p = this.player;
+    const usingTouchAim = this.input.touchAim.id !== null;
+
+    let tx: number;
+    let ty: number;
+    if (usingTouchAim) {
+      const reach = 260;
+      tx = p.x + Math.cos(p.ang) * reach;
+      ty = p.y + Math.sin(p.ang) * reach;
+    } else {
+      tx = this.input.pointer.x;
+      ty = this.input.pointer.y;
+    }
+
+    const dx = tx - p.x;
+    const dy = ty - p.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 28) return;
+
+    const ax = dx / dist;
+    const ay = dy / dist;
+    const x0 = p.x + ax * 18;
+    const y0 = p.y + ay * 18;
+    const x1 = tx - ax * 8;
+    const y1 = ty - ay * 8;
+
+    const firing = this.input.pointer.down || this.input.autofire || usingTouchAim;
+
+    ctx.save();
+    ctx.strokeStyle = firing ? 'rgba(99,247,255,0.38)' : 'rgba(99,247,255,0.2)';
+    ctx.lineWidth = 1.15;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([2.5, 6.5]);
+    if (!this.reducedMotion) ctx.lineDashOffset = -(this.gameT * 52);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const a = firing ? 0.5 : 0.3;
+    ctx.strokeStyle = `rgba(99,247,255,${a})`;
+    ctx.lineWidth = 1;
+    const r = 5;
+    ctx.beginPath();
+    ctx.moveTo(tx - r, ty);
+    ctx.lineTo(tx + r, ty);
+    ctx.moveTo(tx, ty - r);
+    ctx.lineTo(tx, ty + r);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(tx, ty, 2, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   render(): void {
     const ctx = this.ctx;
     ctx.setTransform(this.DPR, 0, 0, this.DPR, 0, 0);
@@ -1606,6 +1666,7 @@ export class Game {
     }
 
     this.drawPlayer();
+    this.drawAimTracer();
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
 

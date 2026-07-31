@@ -8,3 +8,4 @@
 - Removed personal-best line from the intro screen footer.
 - Removed the B bloom toggle and its UI/docs mentions (glow still auto-applies on desktop).
 - Track autofire on the leaderboard (AF badge); added migrate-autofire.sql for existing Supabase tables.
+- Added a subtle animated dotted aim tracer from the ship to the mouse (and along stick aim on touch).
