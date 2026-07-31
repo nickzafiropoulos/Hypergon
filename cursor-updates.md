@@ -23,3 +23,4 @@
 - Hit-chain scales floating scores up to 4× (resets after 2s idle); max size uses gradient + vibrate.
 - Removed dashed empty-state box on Sector Leaders, swapped UI emdashes for hyphens, and bumped landing panel body type one step.
 - Matched Sector Leaders panel width to the instructions grid above it.
+- Expanded procedural SFX: distinct cues per weapon and key events (hits, shield, mult-up, sector, combo max, etc.).
