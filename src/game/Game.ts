@@ -12,7 +12,7 @@ import {
   type PowerKey,
   type WeaponKey,
 } from './catalogue';
-import { resumeAudio, SFX, tone, toggleMute, isMuted } from './audio';
+import { resumeAudio, SFX, toggleMute, isMuted } from './audio';
 import { WarpGrid } from './grid';
 import { depthScale } from './depth';
 import { angDiff, clamp, len, lerp, norm, pick, rnd, TAU } from './maths';
@@ -243,6 +243,7 @@ export class Game {
     this.onEnterPlay();
     this.toast('SECTOR 01', this.sectorName(1), 1500, '#63f7ff');
     resumeAudio();
+    SFX.launch();
   }
 
   togglePause(): void {
@@ -267,6 +268,7 @@ export class Game {
     }
     setTimeout(() => {
       if (this.state === 'over') {
+        SFX.gameOver();
         this.onGameOver({
           score: this.score,
           best: this.best,
@@ -285,7 +287,7 @@ export class Game {
     let i = owned.indexOf(this.curW);
     if (i < 0) i = 0;
     this.curW = owned[(i + dir + owned.length) % owned.length]!;
-    tone(420, 0.06, 'square', 0.05, 200);
+    SFX.swap();
   }
 
   equip(w: WeaponKey, amount: number): void {
@@ -327,6 +329,7 @@ export class Game {
     if (this.curW === 'lance') {
       this.beam = { ax, ay };
       this.ammo.lance -= dt * 60;
+      SFX.lance();
       if (this.ammo.lance <= 0) {
         this.ammo.lance = 0;
         this.curW = 'pulse';
@@ -372,7 +375,7 @@ export class Game {
           );
         }
         this.ammo.scatter--;
-        tone(180, 0.14, 'square', 0.06, -90);
+        SFX.scatter();
         break;
       }
       case 'swarm': {
@@ -394,7 +397,7 @@ export class Game {
           this.bullets.push(b);
         }
         this.ammo.swarm--;
-        tone(880, 0.1, 'sine', 0.04, -320);
+        SFX.swarm();
         break;
       }
       case 'arc': {
@@ -519,7 +522,10 @@ export class Game {
     e.flash = 0.12;
     if (e.type === 'singular') e.grow = (e.grow || 0) + amount * 0.7;
     if (e.hp <= 0) this.killEnemy(e, false);
-    else spark(this.parts, e.x, e.y, e.col, 3, 140, 0.28, 1.8);
+    else {
+      SFX.hit();
+      spark(this.parts, e.x, e.y, e.col, 3, 140, 0.28, 1.8);
+    }
   }
 
   killEnemy(e: Enemy, byBomb: boolean): void {
@@ -550,7 +556,7 @@ export class Game {
         const a = (i / 9) * TAU;
         this.spawnEnemy('shard', e.x + Math.cos(a) * 46, e.y + Math.sin(a) * 46);
       }
-    } else SFX.pop();
+    } else SFX.pop(this.hitChain);
 
     if (e.type === 'splitter' && (e.gen || 0) < 2) {
       const n = e.gen === 0 ? 3 : 2;
@@ -635,7 +641,7 @@ export class Game {
     if (newSector !== this.sector) {
       this.sector = newSector;
       this.toast('SECTOR ' + String(this.sector).padStart(2, '0'), this.sectorName(this.sector), 1400, '#63f7ff');
-      tone(220, 0.5, 'sine', 0.07, 180);
+      SFX.sector();
       if (this.sector % 3 === 0) this.bombs = Math.min(this.bombs + 1, 5);
     }
     const diff = 1 + this.elapsed / 34;
@@ -677,6 +683,7 @@ export class Game {
         const [x, y] = this.safeSpawnPoint();
         this.spawnEnemy('singular', x, y);
         this.toast('SINGULARITY', 'it eats the grid', 1100, '#ff2d55');
+        SFX.singularity();
       }
     }
   }
@@ -695,14 +702,15 @@ export class Game {
       ringFx(this.rings, this.player.x, this.player.y, '#63f7ff', 18, 190, 0.4);
       spark(this.parts, this.player.x, this.player.y, '#63f7ff', 20, 340, 0.5, 2.4);
       this.grid.impulse(this.player.x, this.player.y, 12, 300);
-      tone(700, 0.2, 'sine', 0.08, -420);
+      SFX.shield();
       return;
     }
     this.lives--;
     this.player.invuln = 2.6;
     this.mult = 1;
     this.gemBank = 0;
-    SFX.death();
+    if (this.lives <= 0) SFX.death();
+    else SFX.hurt();
     this.shake = 32;
     this.hitstop = 0.13;
     spark(this.parts, this.player.x, this.player.y, '#ffffff', 50, 560, 1.1, 3);
@@ -849,7 +857,7 @@ export class Game {
             this.droneCd[d] = 0.3;
             const [bx, by] = norm(best.x - dx, best.y - dy);
             this.bullets.push(this.mkBullet(dx, dy, bx * 980, by * 980, 0.9, 2.4, '#ff8fd0', 1, 1.1));
-            tone(1280, 0.03, 'square', 0.02, -300);
+            SFX.drone();
           }
         }
       }
@@ -977,7 +985,7 @@ export class Game {
             b.vy = ny * 760 + rnd(160, -160);
             b.life = Math.min(b.life, 0.5);
             spark(this.parts, b.x, b.y, '#ff7a3d', 4, 180, 0.25, 2);
-            tone(900, 0.04, 'square', 0.03, -400);
+            SFX.bounce();
             continue;
           }
         }
@@ -1116,7 +1124,7 @@ export class Game {
                 col: '#ff3fa4',
               });
             }
-            tone(160, 0.16, 'sawtooth', 0.04, -60);
+            SFX.enemyShot();
           }
           break;
         }
@@ -1237,6 +1245,7 @@ export class Game {
         if (this.gemBank >= need && this.mult < 150) {
           this.gemBank -= need;
           this.mult++;
+          SFX.multUp(this.mult);
           if (this.mult % 25 === 0) this.toast('×' + this.mult, 'multiplier', 700, GEM_COL);
         }
         continue;
@@ -1324,6 +1333,7 @@ export class Game {
     // 7 chained hits → 4× (hard cap).
     const scale = clamp(1 + ((this.hitChain - 1) / 6) * 3, 1, 4);
     const hot = scale >= 4;
+    if (this.hitChain === 7) SFX.comboMax();
     if (this.scorePops.length >= 36) this.scorePops.splice(0, 8);
     this.scorePops.push({
       x,
