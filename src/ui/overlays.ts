@@ -68,7 +68,7 @@ export class Overlays {
         ${boardHtml(scores)}
       </div>
       <button class="cta" id="go" type="button">Launch</button>
-      <p class="fine">Best ${this.game.best.toLocaleString('en-GB')} &nbsp;·&nbsp; P pause · M mute · B bloom · F auto-fire</p>`;
+      <p class="fine">P pause · M mute · B bloom · F auto-fire</p>`;
     this.show();
     document.getElementById('go')!.onclick = () => {
       this.game.startRun();
