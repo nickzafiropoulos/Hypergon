@@ -15,6 +15,11 @@ import {
 import { resumeAudio, SFX, toggleMute, isMuted } from './audio';
 import { WarpGrid } from './grid';
 import { depthScale } from './depth';
+import {
+  beatGameSession,
+  clearSessionToken,
+  startGameSession,
+} from '../leaderboard/supabase';
 import { angDiff, clamp, len, lerp, norm, pick, rnd, TAU } from './maths';
 import { pushParticle, ringFx, spark } from './particles';
 import type {
@@ -82,6 +87,8 @@ export class Game {
   /** Consecutive kill chain for floating score size. */
   hitChain = 0;
   hitChainT = 0;
+  /** Seconds since last leaderboard session heartbeat. */
+  sessionBeatT = 0;
 
   score = 0;
   best = loadBest();
@@ -209,6 +216,8 @@ export class Game {
     this.scorePops.length = 0;
     this.hitChain = 0;
     this.hitChainT = 0;
+    this.sessionBeatT = 0;
+    clearSessionToken();
     this.score = 0;
     this.mult = 1;
     this.lives = 3;
@@ -244,6 +253,24 @@ export class Game {
     this.toast('SECTOR 01', this.sectorName(1), 1500, '#63f7ff');
     resumeAudio();
     SFX.launch();
+    void startGameSession().then((ok) => {
+      if (ok) void this.pulseSession();
+    });
+  }
+
+  private sessionStats() {
+    return {
+      score: this.score,
+      kills: this.kills,
+      sector: this.sector,
+      elapsed: this.elapsed,
+      autofire: this.usedAutofire,
+    };
+  }
+
+  private pulseSession(): Promise<boolean> {
+    this.sessionBeatT = 0;
+    return beatGameSession(this.sessionStats());
   }
 
   togglePause(): void {
@@ -258,6 +285,7 @@ export class Game {
 
   gameOver(): void {
     this.state = 'over';
+    void this.pulseSession();
     if (this.score > this.best) {
       this.best = this.score;
       try {
@@ -779,6 +807,8 @@ export class Game {
         this.hitChainT = 0;
       }
     }
+    this.sessionBeatT += dt;
+    if (this.sessionBeatT >= 5) void this.pulseSession();
     const ets = this.buffs.timewarp > 0 ? 0.32 : 1;
     for (const k of Object.keys(this.buffs) as (keyof typeof this.buffs)[]) {
       if (this.buffs[k] > 0) this.buffs[k] = Math.max(0, this.buffs[k] - dt);

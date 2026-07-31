@@ -85,9 +85,39 @@ If you already ran `schema.sql` before autofire existed:
 
 Runs that used **F auto-fire** show a small **AF** badge on the leaderboard.
 
-### Fix: “Could not submit - try again”
+### Fix: “Could not submit - try again” (reads only)
 
-If the board loads empty / submit fails with that message, the table likely has RLS policies but no grants for the public `anon` role. Run [`supabase/migrate-grants.sql`](supabase/migrate-grants.sql) in the SQL Editor (same paste → Run steps).
+If the board fails to **load**, the table may be missing SELECT grants. Run [`supabase/migrate-grants.sql`](supabase/migrate-grants.sql).  
+Score **submits** no longer go through public INSERT — they require the secure session flow below.
+
+### Secure leaderboard (anti-cheat sessions)
+
+Direct inserts into `scores` with the anon key are blocked. The game must:
+
+1. Start a session token when a run begins  
+2. Heartbeat score/kills/time every few seconds  
+3. Submit through an Edge Function that rejects huge jumps / impossible totals  
+
+**This is not unbeatable** (a clever client can still fake a realistic climb), but it stops the trivial “POST a billion points” cheat.
+
+#### A. Run the SQL migration
+
+1. Supabase → **SQL Editor** → **New query**  
+2. Paste [`supabase/migrate-sessions.sql`](supabase/migrate-sessions.sql) → **Run**
+
+#### B. Deploy the Edge Function
+
+1. Supabase → **Edge Functions** → **Deploy a new function** (or CLI: `supabase functions deploy leaderboard`)  
+2. Name it exactly: `leaderboard`  
+3. Paste the contents of [`supabase/functions/leaderboard/index.ts`](supabase/functions/leaderboard/index.ts)  
+4. Deploy (use the project’s default secrets — `SUPABASE_SERVICE_ROLE_KEY` is injected automatically)  
+5. Ensure the function allows calls with the **anon** key (default JWT verify is fine with `functions.invoke`)
+
+#### C. Redeploy the game
+
+Push to `main` (or re-run the GitHub Actions deploy) so the client uses session heartbeats + the function submit path.
+
+Without the function deployed, the game still plays; online submit will say there is no valid session.
 
 ## Deploy
 

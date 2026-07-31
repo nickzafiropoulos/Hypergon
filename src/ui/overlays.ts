@@ -148,6 +148,7 @@ export class Overlays {
           sector: stats.sector,
           kills: stats.kills,
           autofire: stats.autofire,
+          elapsed: stats.elapsed,
         });
         if (!result.ok) {
           msg.textContent = result.reason;
