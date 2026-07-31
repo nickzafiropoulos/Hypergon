@@ -120,11 +120,18 @@ export class Overlays {
         <h2 class="glyph board-title">Sector leaders</h2>
         ${boardHtml(scores)}
       </div>
-      <button class="cta" id="go" type="button">Run it back</button>
-      <p class="fine">or press Enter</p>`;
+      <div class="cta-stack">
+        <button class="cta" id="go" type="button">Try again</button>
+        <button class="cta secondary" id="quit" type="button">Quit to start screen</button>
+      </div>
+      <p class="fine">or press Enter to try again</p>`;
     this.show();
     document.getElementById('go')!.onclick = () => {
       this.game.startRun();
+    };
+    document.getElementById('quit')!.onclick = () => {
+      this.game.state = 'menu';
+      void this.menuPanel();
     };
 
     const form = document.getElementById('score-form') as HTMLFormElement | null;

@@ -17,5 +17,6 @@
 - Made the railgun a thick cyan-white laser (muzzle-anchored beam + full-screen flash) so shots are easy to read.
 - Softened the ship warp-grid wake and dimmed hot grid lines so the arena stays readable around the player.
 - Diagnosed leaderboard submit failure as missing Supabase GRANT on scores for anon; added migrate-grants.sql and schema grants.
+- Game over: renamed retry to “Try again” and added “Quit to start screen”.
 - Removed dashed empty-state box on Sector Leaders, swapped UI emdashes for hyphens, and bumped landing panel body type one step.
 - Matched Sector Leaders panel width to the instructions grid above it.
