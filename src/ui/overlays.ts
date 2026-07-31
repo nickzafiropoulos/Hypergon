@@ -18,10 +18,12 @@ function boardHtml(rows: ScoreRow[]): string {
     return `<p class="board-empty">${msg}</p>`;
   }
   return `<ol class="board">${rows
-    .map(
-      (r, i) =>
-        `<li><span class="rank">${String(i + 1).padStart(2, '0')}</span><span class="who">${escapeHtml(r.name)}</span><span class="pts">${r.score.toLocaleString('en-GB')}</span></li>`,
-    )
+    .map((r, i) => {
+      const af = r.autofire
+        ? `<span class="af" title="Auto-fire used">AF</span>`
+        : '';
+      return `<li><span class="rank">${String(i + 1).padStart(2, '0')}</span><span class="who"><span class="who-name">${escapeHtml(r.name)}</span>${af}</span><span class="pts">${r.score.toLocaleString('en-GB')}</span></li>`;
+    })
     .join('')}</ol>`;
 }
 
@@ -93,6 +95,7 @@ export class Overlays {
     kills: number;
     elapsed: number;
     sector: number;
+    autofire: boolean;
   }): Promise<void> {
     const scores = await fetchTopScores(10);
     const canSubmit = isLeaderboardConfigured() && stats.score > 0;
@@ -138,6 +141,7 @@ export class Overlays {
           score: stats.score,
           sector: stats.sector,
           kills: stats.kills,
+          autofire: stats.autofire,
         });
         if (!result.ok) {
           msg.textContent = result.reason;

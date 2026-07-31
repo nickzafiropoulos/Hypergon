@@ -366,9 +366,26 @@ canvas {
 }
 .board .who {
   color: #eaf6ff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.board .who-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+.board .af {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--amber);
+  border: 1px solid rgba(255, 176, 46, 0.55);
+  padding: 2px 5px;
+  line-height: 1;
 }
 .board .pts {
   color: var(--ash);

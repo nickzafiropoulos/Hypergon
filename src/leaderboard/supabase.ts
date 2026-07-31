@@ -7,6 +7,7 @@ export type ScoreRow = {
   score: number;
   sector: number;
   kills: number;
+  autofire?: boolean;
   created_at?: string;
 };
 
@@ -30,7 +31,7 @@ export async function fetchTopScores(limit = 10): Promise<ScoreRow[]> {
   if (!sb) return [];
   const { data, error } = await sb
     .from('scores')
-    .select('id,name,score,sector,kills,created_at')
+    .select('id,name,score,sector,kills,autofire,created_at')
     .order('score', { ascending: false })
     .limit(limit);
   if (error || !data) return [];
@@ -42,6 +43,7 @@ export async function submitScore(input: {
   score: number;
   sector: number;
   kills: number;
+  autofire: boolean;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
   const check = sanitizeName(input.name);
   if (!check.ok) return check;
@@ -55,6 +57,7 @@ export async function submitScore(input: {
     score: Math.floor(input.score),
     sector: Math.floor(input.sector),
     kills: Math.floor(input.kills),
+    autofire: !!input.autofire,
   });
   if (error) return { ok: false, reason: 'Could not submit — try again.' };
   return { ok: true };

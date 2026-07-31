@@ -5,6 +5,9 @@
 --   2. Paste this whole file
 --   3. Click Run
 -- That creates the "scores" table + read/insert policies. No manual table setup needed.
+--
+-- If you already created the table earlier, instead run only:
+--   supabase/migrate-autofire.sql
 
 create table if not exists public.scores (
   id uuid primary key default gen_random_uuid(),
@@ -12,6 +15,7 @@ create table if not exists public.scores (
   score integer not null check (score > 0),
   sector integer not null default 1 check (sector >= 1),
   kills integer not null default 0 check (kills >= 0),
+  autofire boolean not null default false,
   created_at timestamptz not null default now()
 );
 

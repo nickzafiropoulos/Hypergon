@@ -39,6 +39,7 @@ export type GameOverFn = (stats: {
   kills: number;
   elapsed: number;
   sector: number;
+  autofire: boolean;
 }) => void;
 
 function loadBest(): number {
@@ -102,6 +103,7 @@ export class Game {
   droneAng = 0;
   gemBank = 0;
   droneCd = [0, 0];
+  usedAutofire = false;
 
   player: Player = { x: 0, y: 0, vx: 0, vy: 0, ang: 0, r: 12, invuln: 0, thrust: 0 };
 
@@ -148,6 +150,7 @@ export class Game {
         this.toast(m ? 'MUTED' : 'SOUND ON', '', 420);
       },
       onAutofire: () => {
+        if (this.input.autofire) this.usedAutofire = true;
         this.toast(
           this.input.autofire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF',
           '',
@@ -205,6 +208,8 @@ export class Game {
     this.beam = null;
     this.shieldHits = 0;
     this.gemBank = 0;
+    this.usedAutofire = false;
+    this.input.autofire = false;
     for (const k of Object.keys(this.buffs) as (keyof typeof this.buffs)[]) {
       this.buffs[k] = 0;
     }
@@ -251,6 +256,7 @@ export class Game {
           kills: this.kills,
           elapsed: this.elapsed,
           sector: this.sector,
+          autofire: this.usedAutofire,
         });
       }
     }, 900);
