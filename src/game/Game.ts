@@ -528,14 +528,17 @@ export class Game {
     }
   }
 
-  killEnemy(e: Enemy, byBomb: boolean): void {
+  /** @param award false = death-clear / no credit (no score, gems, splits). */
+  killEnemy(e: Enemy, byBomb: boolean, award = true): void {
     if (e.dead) return;
     e.dead = true;
     const t = ETYPE[e.type];
-    const gained = t.score * this.mult;
-    this.score += gained;
-    this.kills++;
-    this.pushScorePop(e.x, e.y, gained, e.col);
+    if (award) {
+      const gained = t.score * this.mult;
+      this.score += gained;
+      this.kills++;
+      this.pushScorePop(e.x, e.y, gained, e.col);
+    }
     spark(
       this.parts,
       e.x,
@@ -550,15 +553,19 @@ export class Game {
     ringFx(this.rings, e.x, e.y, e.col, e.r * 0.8, e.r * 4.5, 0.35);
     this.shake = Math.max(this.shake, e.r * 0.22);
     if (e.type === 'singular') {
-      SFX.big();
+      if (award) SFX.big();
       this.shake = Math.max(this.shake, 18);
-      for (let i = 0; i < 9; i++) {
-        const a = (i / 9) * TAU;
-        this.spawnEnemy('shard', e.x + Math.cos(a) * 46, e.y + Math.sin(a) * 46);
+      if (award) {
+        for (let i = 0; i < 9; i++) {
+          const a = (i / 9) * TAU;
+          this.spawnEnemy('shard', e.x + Math.cos(a) * 46, e.y + Math.sin(a) * 46);
+        }
       }
-    } else SFX.pop(this.hitChain);
+    } else if (award) {
+      SFX.pop(this.hitChain);
+    }
 
-    if (e.type === 'splitter' && (e.gen || 0) < 2) {
+    if (award && e.type === 'splitter' && (e.gen || 0) < 2) {
       const n = e.gen === 0 ? 3 : 2;
       for (let i = 0; i < n; i++) {
         const a = rnd(TAU);
@@ -570,6 +577,8 @@ export class Game {
         c.birth = 0.18;
       }
     }
+
+    if (!award) return;
 
     const gn = byBomb ? Math.ceil(t.gems / 2) : t.gems;
     let firstGem: Gem | null = null;
@@ -717,7 +726,9 @@ export class Game {
     ringFx(this.rings, this.player.x, this.player.y, '#ffffff', 20, 420, 0.6);
     this.grid.impulse(this.player.x, this.player.y, 26, Math.max(this.W, this.H) * 0.6);
     for (const e of this.enemies) {
-      if (!e.dead && len(e.x - this.player.x, e.y - this.player.y) < 300) this.killEnemy(e, true);
+      if (!e.dead && len(e.x - this.player.x, e.y - this.player.y) < 300) {
+        this.killEnemy(e, true, false);
+      }
     }
     this.ebullets.length = 0;
     this.player.vx = this.player.vy = 0;

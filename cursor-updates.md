@@ -24,3 +24,4 @@
 - Removed dashed empty-state box on Sector Leaders, swapped UI emdashes for hyphens, and bumped landing panel body type one step.
 - Matched Sector Leaders panel width to the instructions grid above it.
 - Expanded procedural SFX: distinct cues per weapon and key events (hits, shield, mult-up, sector, combo max, etc.).
+- Death-clear no longer awards score/kills/gems for enemies wiped when the player is hit.
