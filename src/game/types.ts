@@ -117,3 +117,13 @@ export type Bolt = {
 };
 
 export type Beam = { ax: number; ay: number };
+
+/** Full-screen rail discharge flash (fades quickly after each shot). */
+export type RailFlash = {
+  x: number;
+  y: number;
+  ax: number;
+  ay: number;
+  life: number;
+  max: number;
+};

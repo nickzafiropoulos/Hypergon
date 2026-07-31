@@ -27,7 +27,7 @@ export const WEAPONS: Record<
   lance: { name: 'LANCE', colour: '#ff3fa4', rate: 0, dmg: 26, cap: 340, blurb: 'continuous beam' },
   swarm: { name: 'SWARM', colour: '#b8ff3d', rate: 0.2, dmg: 2.5, cap: 90, blurb: 'homing seekers' },
   arc: { name: 'ARC', colour: '#a98bff', rate: 0.16, dmg: 1.6, cap: 120, blurb: 'chains 4 targets' },
-  rail: { name: 'RAIL', colour: '#ffffff', rate: 0.62, dmg: 9, cap: 32, blurb: 'pierces everything' },
+  rail: { name: 'RAIL', colour: '#9ee9ff', rate: 0.62, dmg: 9, cap: 32, blurb: 'pierces everything' },
 };
 
 export const WORDER: WeaponKey[] = ['pulse', 'scatter', 'lance', 'swarm', 'arc', 'rail'];

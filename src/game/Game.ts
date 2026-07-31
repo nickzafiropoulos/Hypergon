@@ -28,6 +28,7 @@ import type {
   Gem,
   Particle,
   Player,
+  RailFlash,
   Ring,
 } from './types';
 import { InputSystem } from '../input/InputSystem';
@@ -75,6 +76,7 @@ export class Game {
   drops: Drop[] = [];
   bolts: Bolt[] = [];
   rings: Ring[] = [];
+  railFlashes: RailFlash[] = [];
 
   score = 0;
   best = loadBest();
@@ -198,6 +200,7 @@ export class Game {
     this.drops.length = 0;
     this.bolts.length = 0;
     this.rings.length = 0;
+    this.railFlashes.length = 0;
     this.score = 0;
     this.mult = 1;
     this.lives = 3;
@@ -393,9 +396,10 @@ export class Game {
         break;
       }
       case 'rail': {
-        const b = this.mkBullet(px, py, ax * 2600, ay * 2600, w.dmg, 7, '#ffffff', 99, 1.1);
+        const b = this.mkBullet(px, py, ax * 2600, ay * 2600, w.dmg, 10, '#e8fbff', 99, 1.15);
         b.rail = true;
         this.bullets.push(b);
+        this.railFlashes.push({ x: px, y: py, ax, ay, life: 0.32, max: 0.32 });
         this.ammo.rail--;
         SFX.rail();
         this.shake = Math.max(this.shake, 9);
@@ -881,8 +885,11 @@ export class Game {
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
       if (!b) break;
-      b.px = b.x;
-      b.py = b.y;
+      // Keep rail muzzle anchored so the trail grows into a full beam.
+      if (!b.rail) {
+        b.px = b.x;
+        b.py = b.y;
+      }
       if (b.homing) {
         let best: Enemy | null = null;
         let bd = 420 * 420;
@@ -1276,9 +1283,40 @@ export class Game {
       b.life -= dt;
       if (b.life <= 0) this.bolts.splice(i, 1);
     }
+    for (let i = this.railFlashes.length - 1; i >= 0; i--) {
+      const f = this.railFlashes[i]!;
+      f.life -= dt;
+      if (f.life <= 0) this.railFlashes.splice(i, 1);
+    }
   }
 
   // ---- drawing ----
+  private drawRailLaser(x0: number, y0: number, x1: number, y1: number, a = 1): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.strokeStyle = '#3aa8ff';
+    ctx.globalAlpha = 0.28 * a;
+    ctx.lineWidth = 34;
+    ctx.stroke();
+    ctx.strokeStyle = '#7ad8ff';
+    ctx.globalAlpha = 0.55 * a;
+    ctx.lineWidth = 16;
+    ctx.stroke();
+    ctx.strokeStyle = '#d6f7ff';
+    ctx.globalAlpha = 0.9 * a;
+    ctx.lineWidth = 7;
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.globalAlpha = a;
+    ctx.lineWidth = 2.6;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private stroke2(col: string, w: number, a = 1): void {
     const ctx = this.ctx;
     ctx.strokeStyle = col;
@@ -1700,10 +1738,25 @@ export class Game {
     }
     for (const e of this.enemies) this.drawEnemy(e);
     for (const b of this.bullets) {
+      if (b.rail) {
+        this.drawRailLaser(b.px, b.py, b.x, b.y, 1);
+        continue;
+      }
       ctx.beginPath();
       ctx.moveTo(b.px, b.py);
       ctx.lineTo(b.x, b.y);
-      this.stroke2(b.col, b.rail ? 5 : 2.4);
+      this.stroke2(b.col, 2.4);
+    }
+    for (const f of this.railFlashes) {
+      const a = clamp(f.life / f.max, 0, 1);
+      const fade = a * a;
+      this.drawRailLaser(
+        f.x,
+        f.y,
+        f.x + f.ax * 2800,
+        f.y + f.ay * 2800,
+        0.55 + 0.45 * fade,
+      );
     }
     for (const bl of this.bolts) {
       const t = bl.life / bl.max;

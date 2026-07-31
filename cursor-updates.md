@@ -14,5 +14,6 @@
 - Restyled Sector Leaders title to match the logo glyph and refined the leaderboard panel separation.
 - Advised keeping gameplay on Canvas 2D; Three.js only as an optional decorative underlay (or fake depth in the warp grid) to avoid a full rewrite and perf hit.
 - Added Canvas 2D fake depth: bowl-projected warp grid with parallax ghost layer, particle z-scaling, and elliptical ring squash (disabled under reduced motion).
+- Made the railgun a thick cyan-white laser (muzzle-anchored beam + full-screen flash) so shots are easy to read.
 - Removed dashed empty-state box on Sector Leaders, swapped UI emdashes for hyphens, and bumped landing panel body type one step.
 - Matched Sector Leaders panel width to the instructions grid above it.
