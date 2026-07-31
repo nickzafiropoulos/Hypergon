@@ -85,6 +85,10 @@ If you already ran `schema.sql` before autofire existed:
 
 Runs that used **F auto-fire** show a small **AF** badge on the leaderboard.
 
+### Fix: “Could not submit - try again”
+
+If the board loads empty / submit fails with that message, the table likely has RLS policies but no grants for the public `anon` role. Run [`supabase/migrate-grants.sql`](supabase/migrate-grants.sql) in the SQL Editor (same paste → Run steps).
+
 ## Deploy
 
 ### GitHub Pages (default)

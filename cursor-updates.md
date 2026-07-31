@@ -16,5 +16,6 @@
 - Added Canvas 2D fake depth: bowl-projected warp grid with parallax ghost layer, particle z-scaling, and elliptical ring squash (disabled under reduced motion).
 - Made the railgun a thick cyan-white laser (muzzle-anchored beam + full-screen flash) so shots are easy to read.
 - Softened the ship warp-grid wake and dimmed hot grid lines so the arena stays readable around the player.
+- Diagnosed leaderboard submit failure as missing Supabase GRANT on scores for anon; added migrate-grants.sql and schema grants.
 - Removed dashed empty-state box on Sector Leaders, swapped UI emdashes for hyphens, and bumped landing panel body type one step.
 - Matched Sector Leaders panel width to the instructions grid above it.

@@ -59,6 +59,9 @@ export async function submitScore(input: {
     kills: Math.floor(input.kills),
     autofire: !!input.autofire,
   });
-  if (error) return { ok: false, reason: 'Could not submit - try again.' };
+  if (error) {
+    console.warn('[hypergon] score submit failed:', error.message, error.hint || '');
+    return { ok: false, reason: 'Could not submit - try again.' };
+  }
   return { ok: true };
 }

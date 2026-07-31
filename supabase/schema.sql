@@ -23,13 +23,19 @@ create index if not exists scores_score_idx on public.scores (score desc);
 
 alter table public.scores enable row level security;
 
+-- Table privileges (RLS policies alone are not enough on modern Supabase)
+grant select, insert on public.scores to anon, authenticated;
+grant usage, select on all sequences in schema public to anon, authenticated;
+
 -- Anyone can read the board
+drop policy if exists "Public read scores" on public.scores;
 create policy "Public read scores"
   on public.scores for select
   to anon, authenticated
   using (true);
 
 -- Anyone can insert a valid row (no updates/deletes)
+drop policy if exists "Public insert scores" on public.scores;
 create policy "Public insert scores"
   on public.scores for insert
   to anon, authenticated
