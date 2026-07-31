@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#05060f" />
+    <title>HYPERGON — vector arena</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div class="row">
+        <div class="stack">
+          <span class="lbl">Score</span>
+          <span class="val" id="score">0</span>
+          <div id="pips"></div>
+        </div>
+        <div class="stack" style="align-items: center">
+          <span class="lbl">Multiplier</span>
+          <span class="val" id="mult">×1</span>
+        </div>
+        <div class="stack right">
+          <span class="lbl">Sector</span>
+          <span class="val" id="wave">01</span>
+        </div>
+      </div>
+      <div class="row" style="align-items: flex-end">
+        <div class="stack" id="weap">
+          <span class="lbl">Weapon</span>
+          <span id="wname">PULSE</span>
+          <div id="wbar"><i id="wfill"></i></div>
+          <span id="wammo">UNLIMITED</span>
+        </div>
+        <div class="stack right">
+          <div id="buffs"></div>
+          <span class="lbl" id="hint">Arrows move · Mouse aim &amp; fire · P pause</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast"><span id="toasttxt"></span><div id="toastsub"></div></div>
+
+    <div id="touch-ui" aria-hidden="true">
+      <div class="stick" id="stick-move"><div class="knob"></div></div>
+      <div class="stick" id="stick-aim"><div class="knob"></div></div>
+      <button type="button" class="touch-btn" id="touch-bomb" aria-label="Shockwave">Bomb</button>
+      <button type="button" class="touch-btn" id="touch-pause" aria-label="Pause">II</button>
+    </div>
+
+    <div id="orient-hint">Rotate for a wider arena</div>
+
+    <div id="veil">
+      <div class="panel" id="panel"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
