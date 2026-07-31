@@ -17,14 +17,23 @@ function boardHtml(rows: ScoreRow[]): string {
       : 'Leaderboard not configured.';
     return `<p class="board-empty">${msg}</p>`;
   }
-  return `<ol class="board">${rows
+  const rankW = String(rows.length).length;
+  return `<div class="board-scroll"><ol class="board">${rows
     .map((r, i) => {
       const af = r.autofire
         ? `<span class="af" title="Auto-fire used">AF</span>`
         : '';
-      return `<li><span class="rank">${String(i + 1).padStart(2, '0')}</span><span class="who"><span class="who-name">${escapeHtml(r.name)}</span>${af}</span><span class="pts">${r.score.toLocaleString('en-GB')}</span></li>`;
+      const rank = String(i + 1).padStart(Math.max(2, rankW), '0');
+      return `<li><span class="rank">${rank}</span><span class="who"><span class="who-name">${escapeHtml(r.name)}</span>${af}</span><span class="pts">${r.score.toLocaleString('en-GB')}</span></li>`;
     })
-    .join('')}</ol>`;
+    .join('')}</ol></div>`;
+}
+
+function boardBlock(scores: ScoreRow[]): string {
+  return `<div class="board-wrap">
+        <h2 class="glyph board-title">Sector leaders</h2>
+        ${boardHtml(scores)}
+      </div>`;
 }
 
 export class Overlays {
@@ -53,7 +62,7 @@ export class Overlays {
   }
 
   async menuPanel(): Promise<void> {
-    const scores = await fetchTopScores(10);
+    const scores = await fetchTopScores();
     this.panel.innerHTML = `
       <h1 class="glyph">HYPERGON</h1>
       <div class="keys">
@@ -64,10 +73,7 @@ export class Overlays {
         <div class="key"><b>PICKUPS</b><span>Hexagons are weapons. Stars are powers.</span></div>
         <div class="key"><b>MULTIPLIER</b><span>Cyan cores raise it. Dying resets it.</span></div>
       </div>
-      <div class="board-wrap">
-        <h2 class="glyph board-title">Sector leaders</h2>
-        ${boardHtml(scores)}
-      </div>
+      ${boardBlock(scores)}
       <button class="cta" id="go" type="button">Launch</button>
       <p class="fine">P pause · M mute · F auto-fire</p>`;
     this.show();
@@ -96,7 +102,7 @@ export class Overlays {
     sector: number;
     autofire: boolean;
   }): Promise<void> {
-    const scores = await fetchTopScores(10);
+    const scores = await fetchTopScores();
     const canSubmit = isLeaderboardConfigured() && stats.score > 0;
     this.panel.innerHTML = `
       <h1 class="glyph" style="font-size:clamp(34px,7vw,74px)">SIGNAL LOST</h1>
@@ -116,10 +122,7 @@ export class Overlays {
       </form>`
           : ''
       }
-      <div class="board-wrap">
-        <h2 class="glyph board-title">Sector leaders</h2>
-        ${boardHtml(scores)}
-      </div>
+      ${boardBlock(scores)}
       <div class="cta-stack">
         <button class="cta" id="go" type="button">Try again</button>
         <button class="cta secondary" id="quit" type="button">Quit to start screen</button>
@@ -159,11 +162,9 @@ export class Overlays {
         msg.textContent = 'Signal received.';
         msg.classList.remove('err');
         input.disabled = true;
-        const refreshed = await fetchTopScores(10);
+        const refreshed = await fetchTopScores();
         const wrap = this.panel.querySelector('.board-wrap');
-        if (wrap) {
-          wrap.innerHTML = `<h2 class="glyph board-title">Sector leaders</h2>${boardHtml(refreshed)}`;
-        }
+        if (wrap) wrap.outerHTML = boardBlock(refreshed);
       };
     }
   }

@@ -97,14 +97,15 @@ export async function beatGameSession(stats: SessionStats): Promise<boolean> {
   return true;
 }
 
-export async function fetchTopScores(limit = 10): Promise<ScoreRow[]> {
+/** Full board (capped for safety; Supabase default max rows is usually 1000). */
+export async function fetchTopScores(limit = 1000): Promise<ScoreRow[]> {
   const sb = getClient();
   if (!sb) return [];
   const { data, error } = await sb
     .from('scores')
     .select('id,name,score,sector,kills,autofire,created_at')
     .order('score', { ascending: false })
-    .limit(limit);
+    .limit(Math.min(Math.max(1, limit), 1000));
   if (error || !data) return [];
   return data as ScoreRow[];
 }

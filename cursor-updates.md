@@ -26,3 +26,4 @@
 - Expanded procedural SFX: distinct cues per weapon and key events (hits, shield, mult-up, sector, combo max, etc.).
 - Death-clear no longer awards score/kills/gems for enemies wiped when the player is hit.
 - Locked down leaderboard: session tokens + Edge Function heartbeats; revoked public score inserts.
+- Callsigns unique per IP (same IP can reuse); leaderboard shows full scrollable list.

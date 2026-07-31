@@ -52,3 +52,15 @@ create index if not exists game_sessions_updated_idx
 alter table public.game_sessions enable row level security;
 revoke all on table public.game_sessions from anon, authenticated;
 grant all on table public.game_sessions to service_role;
+
+create table if not exists public.callsigns (
+  name_key text primary key,
+  name text not null,
+  owner_ip text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.callsigns enable row level security;
+revoke all on table public.callsigns from anon, authenticated;
+grant all on table public.callsigns to service_role;

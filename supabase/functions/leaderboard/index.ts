@@ -62,6 +62,80 @@ function sanitizeName(raw: string): { ok: true; name: string } | { ok: false; re
   return { ok: true, name };
 }
 
+function clientIp(req: Request): string {
+  const xf = req.headers.get('x-forwarded-for');
+  if (xf) {
+    const first = xf.split(',')[0]?.trim();
+    if (first) return first.slice(0, 64);
+  }
+  const real = req.headers.get('x-real-ip')?.trim();
+  if (real) return real.slice(0, 64);
+  const cf = req.headers.get('cf-connecting-ip')?.trim();
+  if (cf) return cf.slice(0, 64);
+  return 'unknown';
+}
+
+/** Claim callsign or verify same-IP reuse. */
+async function assertCallsignOwner(
+  sb: ReturnType<typeof adminClient>,
+  name: string,
+  ip: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const nameKey = name.toLowerCase();
+  const { data: existing, error } = await sb
+    .from('callsigns')
+    .select('name_key, owner_ip')
+    .eq('name_key', nameKey)
+    .maybeSingle();
+  if (error) {
+    console.error(error);
+    return { ok: false, reason: 'Could not verify callsign.' };
+  }
+
+  if (!existing) {
+    const { error: insErr } = await sb.from('callsigns').insert({
+      name_key: nameKey,
+      name,
+      owner_ip: ip,
+      updated_at: new Date().toISOString(),
+    });
+    if (insErr) {
+      // Race: someone else claimed it
+      if (insErr.code === '23505') {
+        return { ok: false, reason: 'Callsign already taken.' };
+      }
+      console.error(insErr);
+      return { ok: false, reason: 'Could not claim callsign.' };
+    }
+    return { ok: true };
+  }
+
+  if (!existing.owner_ip) {
+    // Legacy / unclaimed row — bind to this IP
+    const { error: upErr } = await sb
+      .from('callsigns')
+      .update({ owner_ip: ip, name, updated_at: new Date().toISOString() })
+      .eq('name_key', nameKey)
+      .is('owner_ip', null);
+    if (upErr) {
+      console.error(upErr);
+      return { ok: false, reason: 'Could not claim callsign.' };
+    }
+    return { ok: true };
+  }
+
+  if (existing.owner_ip !== ip) {
+    return { ok: false, reason: 'Callsign already taken.' };
+  }
+
+  // Same IP — refresh display casing if needed
+  await sb
+    .from('callsigns')
+    .update({ name, updated_at: new Date().toISOString() })
+    .eq('name_key', nameKey);
+  return { ok: true };
+}
+
 function nums(body: Body) {
   const score = Math.floor(Number(body.score) || 0);
   const kills = Math.floor(Number(body.kills) || 0);
@@ -228,6 +302,10 @@ Deno.serve(async (req) => {
         const stepErr = validateProgress(session, next, { allowEqual: false });
         if (stepErr) return json({ ok: false, reason: stepErr }, 400);
       }
+
+      const ip = clientIp(req);
+      const claim = await assertCallsignOwner(sb, nameCheck.name, ip);
+      if (!claim.ok) return json(claim, 403);
 
       const { error: scoreErr } = await sb.from('scores').insert({
         name: nameCheck.name,

@@ -119,6 +119,13 @@ Push to `main` (or re-run the GitHub Actions deploy) so the client uses session 
 
 Without the function deployed, the game still plays; online submit will say there is no valid session.
 
+#### D. Callsign ownership (unique names, same-IP reuse)
+
+1. Paste [`supabase/migrate-callsigns.sql`](supabase/migrate-callsigns.sql) → **Run**  
+2. Redeploy the `leaderboard` Edge Function (updated code checks IP on submit)
+
+Callsigns are unique (case-insensitive). The first successful submit binds the name to that client IP; later submits with the same name are allowed only from that IP. Anyone else gets “Callsign already taken.”
+
 ## Deploy
 
 ### GitHub Pages (default)
