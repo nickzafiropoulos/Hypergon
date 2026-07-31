@@ -245,7 +245,7 @@ canvas {
   gap: 1px;
   background: rgba(255, 255, 255, 0.09);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  margin-bottom: 28px;
+  margin-bottom: 36px;
   text-align: left;
 }
 .key {
@@ -320,42 +320,59 @@ canvas {
 }
 
 .board-wrap {
-  margin: 8px auto 32px;
-  max-width: 440px;
+  margin: 12px auto 36px;
+  max-width: 460px;
   text-align: left;
-  border: 1px solid rgba(99, 247, 255, 0.22);
-  background: rgba(7, 10, 24, 0.72);
-  padding: 18px 18px 14px;
+  border: 1px solid rgba(99, 247, 255, 0.28);
+  background:
+    linear-gradient(180deg, rgba(12, 18, 40, 0.92), rgba(5, 8, 18, 0.88)),
+    radial-gradient(ellipse at 50% 0%, rgba(99, 247, 255, 0.1), transparent 55%);
+  padding: 22px 20px 16px;
+  box-shadow:
+    0 0 0 1px rgba(255, 63, 164, 0.08),
+    0 18px 48px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
-.board-title {
-  margin: 0 0 14px;
+.board-title.glyph {
+  font-size: clamp(18px, 3.2vw, 26px);
+  letter-spacing: 0.28em;
+  margin: 0 0 18px;
   text-align: center;
-  letter-spacing: 0.4em;
+  filter: drop-shadow(0 0 16px rgba(99, 247, 255, 0.3));
 }
 .board-empty {
   margin: 0;
-  padding: 22px 12px 18px;
+  padding: 28px 16px 24px;
   text-align: center;
   font-size: 12px;
   letter-spacing: 0.28em;
-  color: rgba(240, 248, 255, 0.38);
+  color: rgba(240, 248, 255, 0.4);
   text-transform: uppercase;
+  border: 1px dashed rgba(99, 247, 255, 0.18);
+  background: rgba(0, 0, 0, 0.22);
 }
 .board {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(99, 247, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
 }
 .board li {
   display: grid;
-  grid-template-columns: 40px 1fr auto;
+  grid-template-columns: 44px 1fr auto;
   gap: 12px;
-  padding: 8px 12px;
+  align-items: center;
+  padding: 11px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 13px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+}
+.board li:nth-child(odd) {
+  background: rgba(99, 247, 255, 0.03);
+}
+.board li:first-child {
+  background: linear-gradient(90deg, rgba(99, 247, 255, 0.1), rgba(255, 63, 164, 0.04));
 }
 .board li:last-child {
   border-bottom: 0;
@@ -363,6 +380,13 @@ canvas {
 .board .rank {
   color: var(--ion);
   font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 12px rgba(99, 247, 255, 0.35);
+}
+.board li:first-child .rank {
+  color: var(--amber);
+  text-shadow: 0 0 12px rgba(255, 176, 46, 0.4);
 }
 .board .who {
   color: #eaf6ff;
@@ -388,8 +412,10 @@ canvas {
   line-height: 1;
 }
 .board .pts {
-  color: var(--ash);
+  color: rgba(240, 248, 255, 0.72);
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
 .submit-row {
@@ -557,8 +583,8 @@ canvas {
     width: min(100%, 320px);
   }
   .board-wrap {
-    margin-bottom: 24px;
-    padding: 14px 12px 10px;
+    margin: 8px auto 28px;
+    padding: 18px 14px 12px;
   }
 }
 

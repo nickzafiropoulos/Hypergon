@@ -65,7 +65,7 @@ export class Overlays {
         <div class="key"><b>MULTIPLIER</b><span>Cyan cores raise it. Dying resets it.</span></div>
       </div>
       <div class="board-wrap">
-        <p class="lbl board-title">Sector leaders</p>
+        <h2 class="glyph board-title">Sector leaders</h2>
         ${boardHtml(scores)}
       </div>
       <button class="cta" id="go" type="button">Launch</button>
@@ -117,7 +117,7 @@ export class Overlays {
           : ''
       }
       <div class="board-wrap">
-        <p class="lbl board-title">Sector leaders</p>
+        <h2 class="glyph board-title">Sector leaders</h2>
         ${boardHtml(scores)}
       </div>
       <button class="cta" id="go" type="button">Run it back</button>
@@ -154,7 +154,7 @@ export class Overlays {
         const refreshed = await fetchTopScores(10);
         const wrap = this.panel.querySelector('.board-wrap');
         if (wrap) {
-          wrap.innerHTML = `<p class="lbl board-title">Sector leaders</p>${boardHtml(refreshed)}`;
+          wrap.innerHTML = `<h2 class="glyph board-title">Sector leaders</h2>${boardHtml(refreshed)}`;
         }
       };
     }
