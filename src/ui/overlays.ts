@@ -12,7 +12,10 @@ function escapeHtml(s: string): string {
 
 function boardHtml(rows: ScoreRow[]): string {
   if (!rows.length) {
-    return `<p class="fine">${isLeaderboardConfigured() ? 'No scores yet — be the first.' : 'Leaderboard not configured.'}</p>`;
+    const msg = isLeaderboardConfigured()
+      ? 'No scores yet — be the first.'
+      : 'Leaderboard not configured.';
+    return `<p class="board-empty">${msg}</p>`;
   }
   return `<ol class="board">${rows
     .map(

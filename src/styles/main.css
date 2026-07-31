@@ -241,11 +241,11 @@ canvas {
 }
 .keys {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
   background: rgba(255, 255, 255, 0.09);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  margin-bottom: 24px;
+  margin-bottom: 28px;
   text-align: left;
 }
 .key {
@@ -320,19 +320,33 @@ canvas {
 }
 
 .board-wrap {
-  margin: 0 auto 24px;
-  max-width: 420px;
+  margin: 8px auto 32px;
+  max-width: 440px;
   text-align: left;
+  border: 1px solid rgba(99, 247, 255, 0.22);
+  background: rgba(7, 10, 24, 0.72);
+  padding: 18px 18px 14px;
 }
 .board-title {
-  margin-bottom: 10px;
+  margin: 0 0 14px;
   text-align: center;
+  letter-spacing: 0.4em;
+}
+.board-empty {
+  margin: 0;
+  padding: 22px 12px 18px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.28em;
+  color: rgba(240, 248, 255, 0.38);
+  text-transform: uppercase;
 }
 .board {
   list-style: none;
   margin: 0;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
 }
 .board li {
   display: grid;
@@ -508,6 +522,7 @@ canvas {
     font-size: 28px;
   }
   .keys {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: 18px;
   }
   .tag {
@@ -523,6 +538,10 @@ canvas {
   .cta {
     padding: 16px 28px;
     width: min(100%, 320px);
+  }
+  .board-wrap {
+    margin-bottom: 24px;
+    padding: 14px 12px 10px;
   }
 }
 
