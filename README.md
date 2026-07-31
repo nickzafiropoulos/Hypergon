@@ -75,6 +75,16 @@ Without those real values, the game still runs — only the shared online leader
 
 Callsigns are filtered in the game (length, characters, simple swear filter).
 
+### Adding autofire to an existing table
+
+If you already ran `schema.sql` before autofire existed:
+
+1. Supabase → **SQL Editor** → **New query**
+2. Open [`supabase/migrate-autofire.sql`](supabase/migrate-autofire.sql), copy all of it, paste, **Run**
+3. Restart `npm run dev` (the game code already sends/shows the flag)
+
+Runs that used **F auto-fire** show a small **AF** badge on the leaderboard.
+
 ## Deploy
 
 ### GitHub Pages (default)
