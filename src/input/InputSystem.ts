@@ -1,3 +1,10 @@
+function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false;
+  const tag = t.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return t.isContentEditable;
+}
+
 export type StickState = {
   mx: number;
   my: number;
@@ -42,6 +49,9 @@ export class InputSystem {
 
   private bind(): void {
     addEventListener('keydown', (e) => {
+      // Let callsign / form fields receive letters (Q/E/WASD/etc. are game binds).
+      if (isTypingTarget(e.target)) return;
+
       const block = [
         'ArrowUp',
         'ArrowDown',
@@ -70,6 +80,7 @@ export class InputSystem {
     });
 
     addEventListener('keyup', (e) => {
+      if (isTypingTarget(e.target)) return;
       this.held[e.code] = false;
     });
 
