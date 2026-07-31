@@ -104,6 +104,8 @@ export class Game {
   gemBank = 0;
   droneCd = [0, 0];
   usedAutofire = false;
+  gemHintShown = false;
+  gemHint: { gem: Gem; life: number; max: number; x: number; y: number } | null = null;
 
   player: Player = { x: 0, y: 0, vx: 0, vy: 0, ang: 0, r: 12, invuln: 0, thrust: 0 };
 
@@ -210,6 +212,8 @@ export class Game {
     this.gemBank = 0;
     this.usedAutofire = false;
     this.input.autofire = false;
+    this.gemHintShown = false;
+    this.gemHint = null;
     for (const k of Object.keys(this.buffs) as (keyof typeof this.buffs)[]) {
       this.buffs[k] = 0;
     }
@@ -546,18 +550,25 @@ export class Game {
     }
 
     const gn = byBomb ? Math.ceil(t.gems / 2) : t.gems;
+    let firstGem: Gem | null = null;
     for (let i = 0; i < gn; i++) {
       if (this.gems.length >= MAX_GEMS) break;
       const a = rnd(TAU);
       const s = rnd(190, 60);
-      this.gems.push({
+      const gem: Gem = {
         x: e.x,
         y: e.y,
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s,
         life: 9,
         ang: rnd(TAU),
-      });
+      };
+      this.gems.push(gem);
+      if (!firstGem) firstGem = gem;
+    }
+    if (!this.gemHintShown && firstGem) {
+      this.gemHintShown = true;
+      this.gemHint = { gem: firstGem, life: 5.2, max: 5.2, x: firstGem.x, y: firstGem.y };
     }
     if (!byBomb) {
       const roll = Math.random();
@@ -1205,6 +1216,16 @@ export class Game {
       }
       if (g.life <= 0) this.gems.splice(i, 1);
     }
+
+    if (this.gemHint) {
+      const h = this.gemHint;
+      h.life -= dt;
+      if (this.gems.includes(h.gem)) {
+        h.x = h.gem.x;
+        h.y = h.gem.y;
+      }
+      if (h.life <= 0) this.gemHint = null;
+    }
   }
 
   private updateDrops(dt: number): void {
@@ -1293,6 +1314,48 @@ export class Game {
       else ctx.moveTo(px, py);
     }
     ctx.closePath();
+  }
+
+  /** Temporary label on the first multiplier core of a run. */
+  private drawGemHint(): void {
+    const h = this.gemHint;
+    if (!h) return;
+    const ctx = this.ctx;
+    const t = h.life / h.max;
+    const fade = t > 0.75 ? (1 - t) / 0.25 : t < 0.2 ? t / 0.2 : 1;
+    const bob = Math.sin(this.gameT * 3.2) * 3;
+    let lx = h.x + 22;
+    let ly = h.y - 28 + bob;
+    const label = 'Collect these to increase your multiplier!';
+    ctx.save();
+    ctx.font = '600 13px Chakra Petch, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(label).width;
+    // Keep on-screen
+    lx = clamp(lx, 12, this.W - tw - 16);
+    ly = clamp(ly, 18, this.H - 18);
+
+    // Leader line back to gem
+    ctx.strokeStyle = `rgba(124,249,255,${0.35 * fade})`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(h.x + 10, h.y - 8);
+    ctx.lineTo(lx - 4, ly);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = `rgba(5,6,15,${0.55 * fade})`;
+    ctx.fillRect(lx - 8, ly - 12, tw + 16, 24);
+    ctx.strokeStyle = `rgba(124,249,255,${0.45 * fade})`;
+    ctx.strokeRect(lx - 8, ly - 12, tw + 16, 24);
+
+    ctx.fillStyle = `rgba(232,255,255,${0.92 * fade})`;
+    ctx.shadowColor = 'rgba(99,247,255,0.55)';
+    ctx.shadowBlur = this.reducedMotion ? 0 : 8;
+    ctx.fillText(label, lx, ly);
+    ctx.restore();
   }
 
   /** Distinct octagon + inner cross for multiplier cores. */
@@ -1575,6 +1638,7 @@ export class Game {
       ctx.globalAlpha = 1;
     }
     for (const g of this.gems) this.drawGem(g);
+    this.drawGemHint();
 
     for (const p of this.drops) {
       const meta = p.kind === 'weapon' ? WEAPONS[p.key as WeaponKey] : POWERS[p.key as PowerKey];

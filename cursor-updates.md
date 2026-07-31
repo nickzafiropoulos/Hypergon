@@ -10,3 +10,4 @@
 - Track autofire on the leaderboard (AF badge); added migrate-autofire.sql for existing Supabase tables.
 - Added a subtle animated dotted aim tracer from the ship to the mouse (and along stick aim on touch).
 - Removed the twin-stick tagline from the landing screen.
+- First multiplier core of a run shows a short on-world hint to collect them.
