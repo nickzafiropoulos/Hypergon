@@ -79,6 +79,9 @@ export class Game {
   rings: Ring[] = [];
   railFlashes: RailFlash[] = [];
   scorePops: ScorePop[] = [];
+  /** Consecutive kill chain for floating score size. */
+  hitChain = 0;
+  hitChainT = 0;
 
   score = 0;
   best = loadBest();
@@ -204,6 +207,8 @@ export class Game {
     this.rings.length = 0;
     this.railFlashes.length = 0;
     this.scorePops.length = 0;
+    this.hitChain = 0;
+    this.hitChainT = 0;
     this.score = 0;
     this.mult = 1;
     this.lives = 3;
@@ -748,6 +753,13 @@ export class Game {
 
   update(dt: number): void {
     this.gameT += dt;
+    if (this.hitChain > 0) {
+      this.hitChainT -= dt;
+      if (this.hitChainT <= 0) {
+        this.hitChain = 0;
+        this.hitChainT = 0;
+      }
+    }
     const ets = this.buffs.timewarp > 0 ? 0.32 : 1;
     for (const k of Object.keys(this.buffs) as (keyof typeof this.buffs)[]) {
       if (this.buffs[k] > 0) this.buffs[k] = Math.max(0, this.buffs[k] - dt);
@@ -1307,8 +1319,22 @@ export class Game {
 
   private pushScorePop(x: number, y: number, value: number, col: string): void {
     if (value <= 0) return;
+    this.hitChain++;
+    this.hitChainT = 2;
+    // 7 chained hits → 4× (hard cap).
+    const scale = clamp(1 + ((this.hitChain - 1) / 6) * 3, 1, 4);
+    const hot = scale >= 4;
     if (this.scorePops.length >= 36) this.scorePops.splice(0, 8);
-    this.scorePops.push({ x, y: y - 10, value, col, life: 1, max: 1 });
+    this.scorePops.push({
+      x,
+      y: y - 10,
+      value,
+      col,
+      life: 1,
+      max: 1,
+      scale,
+      hot,
+    });
   }
 
   // ---- drawing ----
@@ -1317,20 +1343,43 @@ export class Game {
     for (const s of this.scorePops) {
       const t = clamp(s.life / s.max, 0, 1);
       const fade = t > 0.25 ? 1 : t / 0.25;
+      const px =
+        s.hot && !this.reducedMotion ? s.x + rnd(2.8, -2.8) : s.x;
+      const py =
+        s.hot && !this.reducedMotion ? s.y + rnd(2.2, -2.2) : s.y;
+      const fontPx = Math.round(15 * s.scale);
       ctx.save();
       ctx.globalAlpha = fade * 0.95;
-      ctx.font = '700 15px Chakra Petch, sans-serif';
+      ctx.font = `700 ${fontPx}px Chakra Petch, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#e8fbff';
-      ctx.strokeStyle = s.col;
-      ctx.lineWidth = 3;
-      ctx.shadowColor = s.col;
-      ctx.shadowBlur = this.reducedMotion ? 0 : 10;
       const label = '+' + s.value.toLocaleString('en-GB');
-      ctx.strokeText(label, s.x, s.y);
-      ctx.shadowBlur = 0;
-      ctx.fillText(label, s.x, s.y);
+      const tw = ctx.measureText(label).width;
+      if (s.hot) {
+        const g = ctx.createLinearGradient(px - tw * 0.55, py, px + tw * 0.55, py);
+        const shift = (this.gameT * 2.4) % 1;
+        g.addColorStop(0, '#63f7ff');
+        g.addColorStop(clamp(0.35 + shift * 0.25, 0.05, 0.95), '#ff3fa4');
+        g.addColorStop(1, '#ffb02e');
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2 + s.scale * 0.35;
+        ctx.shadowColor = '#ff3fa4';
+        ctx.shadowBlur = this.reducedMotion ? 0 : 16;
+        ctx.strokeText(label, px, py);
+        ctx.shadowBlur = this.reducedMotion ? 0 : 12;
+        ctx.shadowColor = '#63f7ff';
+        ctx.fillStyle = g;
+        ctx.fillText(label, px, py);
+      } else {
+        ctx.fillStyle = '#e8fbff';
+        ctx.strokeStyle = s.col;
+        ctx.lineWidth = 2.2 + s.scale * 0.35;
+        ctx.shadowColor = s.col;
+        ctx.shadowBlur = this.reducedMotion ? 0 : 8 + s.scale * 2;
+        ctx.strokeText(label, px, py);
+        ctx.shadowBlur = 0;
+        ctx.fillText(label, px, py);
+      }
       ctx.restore();
     }
   }

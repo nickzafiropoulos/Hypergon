@@ -136,4 +136,8 @@ export type ScorePop = {
   col: string;
   life: number;
   max: number;
+  /** Visual scale from hit chain (1 → 4). */
+  scale: number;
+  /** True at max chain size — gradient + vibrate. */
+  hot: boolean;
 };
