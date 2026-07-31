@@ -225,7 +225,7 @@ canvas {
   font-size: clamp(46px, 9vw, 104px);
   font-weight: 700;
   letter-spacing: 0.24em;
-  margin: 0 0 4px;
+  margin: 0 0 28px;
   background: linear-gradient(96deg, var(--ion), var(--plasma) 55%, var(--amber));
   -webkit-background-clip: text;
   background-clip: text;

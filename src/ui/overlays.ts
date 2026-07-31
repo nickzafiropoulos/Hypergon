@@ -56,7 +56,6 @@ export class Overlays {
     const scores = await fetchTopScores(10);
     this.panel.innerHTML = `
       <h1 class="glyph">HYPERGON</h1>
-      <p class="tag">Twin-stick vector arena · nine hostile geometries · six weapons</p>
       <div class="keys">
         <div class="key"><b>MOVE</b><span>Arrow keys &nbsp;/&nbsp; WASD &nbsp;/&nbsp; left stick</span></div>
         <div class="key"><b>AIM &amp; FIRE</b><span>Mouse position + hold click &nbsp;/&nbsp; right stick. F locks auto-fire.</span></div>
