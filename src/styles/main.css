@@ -94,6 +94,8 @@ canvas {
 .hud-timer {
   color: var(--amber);
   font-size: 18px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
 .hide {
@@ -206,10 +208,13 @@ canvas {
   z-index: 4;
 }
 #toastsub {
-  font-size: 12px;
-  letter-spacing: 0.42em;
+  font-size: clamp(11px, 1.8vw, 15px);
+  letter-spacing: 0.18em;
   color: var(--ash);
-  margin-top: 8px;
+  margin-top: 10px;
+  max-width: min(720px, 88vw);
+  line-height: 1.45;
+  text-transform: none;
   text-shadow: none;
 }
 
@@ -253,6 +258,34 @@ canvas.screen-confetti {
   background-clip: text;
   color: transparent;
   filter: drop-shadow(0 0 26px rgba(99, 247, 255, 0.35));
+}
+.logo {
+  display: inline-block;
+  transform-origin: 50% 55%;
+  transform-style: preserve-3d;
+  perspective: 600px;
+  will-change: transform;
+  animation: logo-drift 11s ease-in-out infinite;
+}
+@keyframes logo-drift {
+  0% {
+    transform: perspective(600px) translate3d(0, 0, 0) rotateX(2deg) rotateY(-3deg) rotateZ(-0.8deg);
+  }
+  25% {
+    transform: perspective(600px) translate3d(2px, -3px, 8px) rotateX(-1.5deg) rotateY(2.5deg)
+      rotateZ(0.5deg);
+  }
+  50% {
+    transform: perspective(600px) translate3d(-1px, 2px, -4px) rotateX(1deg) rotateY(3deg)
+      rotateZ(0.9deg);
+  }
+  75% {
+    transform: perspective(600px) translate3d(-3px, -1px, 5px) rotateX(-2deg) rotateY(-2deg)
+      rotateZ(-0.4deg);
+  }
+  100% {
+    transform: perspective(600px) translate3d(0, 0, 0) rotateX(2deg) rotateY(-3deg) rotateZ(-0.8deg);
+  }
 }
 .tag {
   font-size: 11px;
@@ -300,10 +333,19 @@ canvas.screen-confetti {
   cursor: pointer;
   box-shadow: 0 0 34px rgba(99, 247, 255, 0.45);
   pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.15s ease,
+    color 0.15s ease;
 }
 .cta:hover {
   background: #fff;
-  box-shadow: 0 0 44px rgba(255, 255, 255, 0.6);
+  transform: translateY(-3px) scale(1.05);
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.55),
+    0 0 44px rgba(255, 255, 255, 0.55);
 }
 .cta:focus-visible {
   outline: 2px solid var(--plasma);
@@ -319,6 +361,8 @@ canvas.screen-confetti {
 .cta.secondary:hover {
   background: rgba(99, 247, 255, 0.12);
   color: #fff;
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
 }
 .cta-stack {
   display: flex;
@@ -353,20 +397,28 @@ canvas.screen-confetti {
   padding: 22px 20px 24px;
   color: #eaf6ff;
   text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transform: translateY(0) scale(1);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 .mode-card:hover,
 .mode-card:focus-visible {
   border-color: var(--ion);
   background: rgba(99, 247, 255, 0.08);
-  box-shadow: 0 0 28px rgba(99, 247, 255, 0.2);
+  transform: translateY(-4px) scale(1.035);
+  box-shadow:
+    0 16px 32px rgba(0, 0, 0, 0.55),
+    0 0 28px rgba(99, 247, 255, 0.22);
   outline: none;
 }
 .mode-card-title {
   display: block;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.12em;
   color: var(--ion);
   margin-bottom: 10px;
 }
@@ -455,9 +507,9 @@ canvas.screen-confetti {
 }
 .board-tab {
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ash);
   background: transparent;
@@ -612,6 +664,9 @@ canvas.screen-confetti {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .logo {
+    animation: none;
+  }
   .board li.mine {
     animation: none;
   }
@@ -832,5 +887,14 @@ canvas.screen-confetti {
 @media (prefers-reduced-motion: reduce) {
   #toast {
     transition: none;
+  }
+  .cta,
+  .cta:hover,
+  .cta.secondary:hover,
+  .mode-card,
+  .mode-card:hover,
+  .mode-card:focus-visible {
+    transition: none;
+    transform: none;
   }
 }

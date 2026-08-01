@@ -57,10 +57,13 @@ export const POWERS: Record<PowerKey, { name: string; col: string; blurb: string
   life: { name: '+1 HULL', col: '#4dffc3', blurb: '' },
 };
 
-/** Multiplier cores — distinct from weaver acid-green and drifter diamonds. */
+/** Multiplier geodes — tiny cyan triangles, distinct from weaver acid-green. */
 export const GEM_COL = '#7cf9ff';
 export const GEM_COL_CORE = '#e8ffff';
 export const GEM_COL_ACCENT = '#63f7ff';
+/** Seconds before a geode despawns; flashes in the last GEM_FLASH window. */
+export const GEM_LIFE = 4.5;
+export const GEM_FLASH = 0.7;
 
 export const MAX_ENEMIES = 90;
 export const MAX_PARTICLES = 420;

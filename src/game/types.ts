@@ -163,6 +163,8 @@ export type Bullet = {
   py: number;
   /** Damage typing for boss weaknesses. */
   src?: DamageSource;
+  /** Times bounced off reflective pillars / plates. */
+  ricochet?: number;
 };
 
 export type EBullet = {
@@ -251,4 +253,6 @@ export type ScorePop = {
   scale: number;
   /** True at max chain size — gradient + vibrate. */
   hot: boolean;
+  /** Optional label (e.g. CRITICAL HIT) instead of +value. */
+  text?: string;
 };

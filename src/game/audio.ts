@@ -6,6 +6,7 @@ let lastBlip = 0;
 let lastHit = 0;
 let lastLance = 0;
 let lastBounce = 0;
+let lastUiHover = 0;
 
 export function isMuted(): boolean {
   return muted;
@@ -37,6 +38,11 @@ function ensureCtx(): AudioContext | null {
 
 export function resumeAudio(): void {
   ensureCtx();
+}
+
+/** Shared context for procedural music (same unlock / mute path as SFX). */
+export function getAudioContext(): AudioContext | null {
+  return ensureCtx();
 }
 
 /** Soften stacked SFX — keep the mix from clipping. */
@@ -122,10 +128,62 @@ function later(ms: number, fn: () => void): void {
 }
 
 export const SFX = {
-  /** UI / run start */
+  /** Dramatic held tone — Launch button / run start (still pitch, long fade) */
   launch() {
-    chord(220, 330, 0.12, 'sine', 0.05, 180);
-    later(90, () => chord(440, 660, 0.18, 'sine', 0.055, 220));
+    if (muted) return;
+    const ctx = ensureCtx();
+    if (!ctx) return;
+    try {
+      const t0 = ctx.currentTime;
+      const attack = 0.06;
+      const hold = 0.22;
+      const fade = 1.26;
+      const peakAt = t0 + attack;
+      const fadeAt = peakAt + hold;
+      const end = fadeAt + fade;
+      const peak = voice(0.16);
+
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.0001, t0);
+      master.gain.exponentialRampToValueAtTime(peak, peakAt);
+      master.gain.setValueAtTime(peak, fadeAt);
+      // Soft exponential tail — hangs then dissolves instead of a linear cut.
+      master.gain.exponentialRampToValueAtTime(0.0001, end);
+      master.connect(ctx.destination);
+
+      const partials: Array<[number, OscillatorType, number]> = [
+        [110, 'sine', 1],
+        [165, 'sine', 0.55],
+        [220, 'triangle', 0.4],
+        [330, 'sine', 0.22],
+      ];
+      for (const [freq, type, amp] of partials) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.value = freq;
+        g.gain.value = amp;
+        o.connect(g).connect(master);
+        o.start(t0);
+        o.stop(end + 0.02);
+      }
+    } catch {
+      /* ignore */
+    }
+  },
+
+  /** Soft click for menus / CTAs */
+  uiClick() {
+    tone(720 + rnd(40), 0.035, 'triangle', 0.04, 180);
+    tone(1100 + rnd(60), 0.02, 'sine', 0.018, -200);
+  },
+
+  /** Quieter tick on button hover */
+  uiHover() {
+    const t = performance.now();
+    if (t - lastUiHover < 55) return;
+    lastUiHover = t;
+    tone(880 + rnd(50), 0.028, 'sine', 0.022, 90);
   },
 
   swap() {
@@ -163,8 +221,8 @@ export const SFX = {
     const t = performance.now();
     if (t - lastLance < 70) return;
     lastLance = t;
-    tone(180 + rnd(40), 0.08, 'sawtooth', 0.018, 40);
-    tone(720 + rnd(80), 0.06, 'triangle', 0.012, -40);
+    tone(180 + rnd(40), 0.09, 'sawtooth', 0.048, 40);
+    tone(720 + rnd(80), 0.07, 'triangle', 0.032, -40);
   },
 
   arc() {
@@ -174,12 +232,57 @@ export const SFX = {
   },
 
   rail() {
-    tone(90, 0.08, 'sawtooth', 0.05, 40);
-    later(40, () => {
-      tone(160, 0.28, 'sawtooth', 0.07, 720);
-      tone(2400, 0.18, 'triangle', 0.04, -1400);
-      noise(0.22, 0.14, 2200);
-    });
+    if (muted) return;
+    const ctx = ensureCtx();
+    if (!ctx) return;
+    try {
+      const t0 = ctx.currentTime;
+      // Charge snap → sustained scream → long fade
+      noise(0.1, 0.07, 2800, 'bandpass');
+      tone(70, 0.12, 'sawtooth', 0.03, 30);
+
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0, t0);
+      master.gain.linearRampToValueAtTime(voice(0.06), t0 + 0.035);
+      master.gain.linearRampToValueAtTime(voice(0.045), t0 + 0.18);
+      master.gain.linearRampToValueAtTime(0, t0 + 1.15);
+      master.connect(ctx.destination);
+
+      const low = ctx.createOscillator();
+      low.type = 'sawtooth';
+      low.frequency.setValueAtTime(90, t0);
+      low.frequency.exponentialRampToValueAtTime(45, t0 + 1.1);
+      const lowG = ctx.createGain();
+      lowG.gain.value = 0.55;
+      low.connect(lowG).connect(master);
+      low.start(t0);
+      low.stop(t0 + 1.18);
+
+      const scream = ctx.createOscillator();
+      scream.type = 'sawtooth';
+      scream.frequency.setValueAtTime(140, t0);
+      scream.frequency.exponentialRampToValueAtTime(920, t0 + 0.09);
+      scream.frequency.exponentialRampToValueAtTime(180, t0 + 1.05);
+      const screamG = ctx.createGain();
+      screamG.gain.value = 0.4;
+      scream.connect(screamG).connect(master);
+      scream.start(t0);
+      scream.stop(t0 + 1.18);
+
+      const ring = ctx.createOscillator();
+      ring.type = 'triangle';
+      ring.frequency.setValueAtTime(2200, t0);
+      ring.frequency.exponentialRampToValueAtTime(480, t0 + 0.95);
+      const ringG = ctx.createGain();
+      ringG.gain.value = 0.22;
+      ring.connect(ringG).connect(master);
+      ring.start(t0);
+      ring.stop(t0 + 1.18);
+
+      later(30, () => noise(0.55, 0.035, 1600, 'lowpass'));
+    } catch {
+      /* ignore */
+    }
   },
 
   /** Combat feedback */

@@ -3,6 +3,8 @@ import {
   GEM_COL,
   GEM_COL_ACCENT,
   GEM_COL_CORE,
+  GEM_FLASH,
+  GEM_LIFE,
   MAX_ENEMIES,
   MAX_GEMS,
   POWERS,
@@ -14,6 +16,7 @@ import {
   type WeaponKey,
 } from './catalogue';
 import { resumeAudio, SFX, toggleMute, isMuted } from './audio';
+import { playMusic, setMusicDucked, setMusicMuted, unlockMusic } from './music';
 import { WarpGrid } from './grid';
 import { depthScale, flipScale } from './depth';
 import { BossDirector } from './BossDirector';
@@ -102,6 +105,8 @@ export class Game {
   best = loadBest();
   mult = 1;
   lives = 3;
+  /** Next score threshold that grants an extra life (1k → 10k → 100k → 1m …). */
+  nextLifeAt = 1000;
   bombs = 3;
   sector = 1;
   elapsed = 0;
@@ -179,6 +184,7 @@ export class Game {
       onPause: () => this.togglePause(),
       onMute: () => {
         const m = toggleMute();
+        setMusicMuted(m);
         this.toast(m ? 'MUTED' : 'SOUND ON', '', 420);
       },
       onAutofire: () => {
@@ -246,6 +252,7 @@ export class Game {
     this.score = 0;
     this.mult = 1;
     this.lives = 3;
+    this.nextLifeAt = 1000;
     this.bombs = 3;
     this.sector = 1;
     this.elapsed = 0;
@@ -278,10 +285,14 @@ export class Game {
     this.state = 'play';
     this.onEnterPlay();
     resumeAudio();
+    unlockMusic();
+    setMusicDucked(false);
     SFX.launch();
     if (this.mode === 'boss') {
+      // Per-boss beds start inside BossDirector.spawnFight.
       this.bosses.begin(this.bossHost());
     } else {
+      playMusic('survival');
       this.toast('SECTOR 01', this.sectorName(1), 1500, '#63f7ff');
     }
     void startGameSession(this.mode).then((ok) => {
@@ -320,8 +331,9 @@ export class Game {
         return g.score;
       },
       set score(v: number) {
-        g.score = v;
+        g.setScore(v);
       },
+      addScore: (n: number) => g.addScore(n),
       get mult() {
         return g.mult;
       },
@@ -367,11 +379,13 @@ export class Game {
             y,
             vx: Math.cos(a) * s,
             vy: Math.sin(a) * s,
-            life: 10,
+            life: GEM_LIFE,
             ang: rnd(TAU),
           });
         }
       },
+      pushFloatText: (x: number, y: number, text: string, col: string) =>
+        g.pushFloatText(x, y, text, col),
       sfxHit: () => SFX.hit(),
       sfxPop: () => SFX.pop(g.hitChain),
       sfxBig: () => SFX.big(),
@@ -399,15 +413,39 @@ export class Game {
   togglePause(): void {
     if (this.state === 'play') {
       this.state = 'paused';
+      setMusicDucked(true);
       this.onPause();
     } else if (this.state === 'paused') {
       this.state = 'play';
+      setMusicDucked(false);
       this.onResume();
+    }
+  }
+
+  /** Add points and grant hull at 1k / 10k / 100k / 1m / … milestones. */
+  addScore(n: number): void {
+    if (n <= 0) return;
+    this.setScore(this.score + n);
+  }
+
+  setScore(v: number): void {
+    this.score = v;
+    while (this.nextLifeAt <= this.score) {
+      const at = this.nextLifeAt;
+      this.nextLifeAt *= 10;
+      SFX.power();
+      if (this.lives < 5) {
+        this.lives++;
+        this.toast('+1 HULL', `${at.toLocaleString('en-GB')} score`, 1200, '#4dffc3');
+      } else {
+        this.toast('HULL MAX', `${at.toLocaleString('en-GB')} score`, 900, '#4dffc3');
+      }
     }
   }
 
   gameOver(): void {
     this.state = 'over';
+    playMusic('menu');
     void this.pulseSession();
     if (this.score > this.best) {
       this.best = this.score;
@@ -436,6 +474,7 @@ export class Game {
   victory(): void {
     if (this.state !== 'play') return;
     this.state = 'win';
+    playMusic('menu');
     void this.pulseSession();
     if (this.score > this.best) {
       this.best = this.score;
@@ -755,7 +794,7 @@ export class Game {
     const t = ETYPE[e.type];
     if (award) {
       const gained = t.score * this.mult;
-      this.score += gained;
+      this.addScore(gained);
       this.kills++;
       this.pushScorePop(e.x, e.y, gained, e.col);
     }
@@ -811,7 +850,7 @@ export class Game {
         y: e.y,
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s,
-        life: 9,
+        life: GEM_LIFE,
         ang: rnd(TAU),
       };
       this.gems.push(gem);
@@ -829,6 +868,8 @@ export class Game {
   }
 
   dropCrate(x: number, y: number, kind: 'weapon' | 'power'): void {
+    // One pickup on screen at a time — more than that gets noisy.
+    if (this.drops.length > 0) return;
     let key: WeaponKey | PowerKey;
     if (kind === 'weapon') key = pick(['scatter', 'lance', 'swarm', 'arc', 'rail'] as const);
     else {
@@ -1274,6 +1315,7 @@ export class Game {
         const src = b.src || (b.rail ? 'rail' : b.homing ? 'swarm' : 'pulse');
         const hit = this.bosses.tryHit(this.bossHost(), b.x, b.y, b.r, b.dmg, src, {
           ang: Math.atan2(b.vy, b.vx),
+          ricochet: b.ricochet || 0,
         });
         if (hit === 'env' && !b.rail) {
           // Reflective pillar bounce
@@ -1282,7 +1324,8 @@ export class Game {
             const [nx, ny] = norm(b.x - block.hit.x, b.y - block.hit.y);
             b.vx = nx * 760 + rnd(160, -160);
             b.vy = ny * 760 + rnd(160, -160);
-            b.life = Math.min(b.life, 0.5);
+            b.life = Math.min(b.life, 0.65);
+            b.ricochet = (b.ricochet || 0) + 1;
             spark(this.parts, b.x, b.y, block.hit.col, 4, 180, 0.25, 2);
             SFX.bounce();
             continue;
@@ -1318,7 +1361,8 @@ export class Game {
             const [nx, ny] = norm(-dx, -dy);
             b.vx = nx * 760 + rnd(160, -160);
             b.vy = ny * 760 + rnd(160, -160);
-            b.life = Math.min(b.life, 0.5);
+            b.life = Math.min(b.life, 0.65);
+            b.ricochet = (b.ricochet || 0) + 1;
             spark(this.parts, b.x, b.y, '#ff7a3d', 4, 180, 0.25, 2);
             SFX.bounce();
             continue;
@@ -1438,29 +1482,13 @@ export class Game {
           break;
         }
         case 'sentry': {
-          const ideal = 300;
-          const push = d < ideal ? -1 : 1;
-          e.vx += tx * e.spd * 3 * dt * ets * push;
-          e.vy += ty * e.spd * 3 * dt * ets * push;
-          e.vx += -ty * e.spd * 2 * dt * ets;
-          e.vy += tx * e.spd * 2 * dt * ets;
-          e.cd = (e.cd || 0) - dt * ets;
-          if (e.cd <= 0 && d < 680) {
-            e.cd = rnd(2.4, 1.5);
-            for (let k = -1; k <= 1; k++) {
-              const a = Math.atan2(ty, tx) + k * 0.2;
-              this.ebullets.push({
-                x: e.x + Math.cos(a) * 20,
-                y: e.y + Math.sin(a) * 20,
-                vx: Math.cos(a) * 300,
-                vy: Math.sin(a) * 300,
-                r: 6,
-                life: 5,
-                col: '#ff3fa4',
-              });
-            }
-            SFX.enemyShot();
-          }
+          // Orbit / kite — no projectile spam.
+          const ideal = 220;
+          const push = d < ideal ? -1.15 : 1.35;
+          e.vx += tx * e.spd * 3.4 * dt * ets * push;
+          e.vy += ty * e.spd * 3.4 * dt * ets * push;
+          e.vx += -ty * e.spd * 2.6 * dt * ets;
+          e.vy += tx * e.spd * 2.6 * dt * ets;
           break;
         }
         case 'bulwark': {
@@ -1621,9 +1649,14 @@ export class Game {
       if (d < this.player.r + SHIP_MAGNET.collectPad) {
         this.gems.splice(i, 1);
         this.gemBank++;
-        this.score += 2 * this.mult;
+        this.addScore(2 * this.mult);
         SFX.gem();
         spark(this.parts, g.x, g.y, GEM_COL, 4, 120, 0.25, 1.6);
+        if (this.gemHint) {
+          // Fade tip out as soon as the first multiplier core is collected.
+          this.gemHint.max = 0.32;
+          this.gemHint.life = Math.min(this.gemHint.life, 0.3);
+        }
         const need = Math.ceil(this.mult / 10);
         if (this.gemBank >= need && this.mult < 150) {
           this.gemBank -= need;
@@ -1759,6 +1792,21 @@ export class Game {
     });
   }
 
+  private pushFloatText(x: number, y: number, text: string, col: string): void {
+    if (this.scorePops.length >= 36) this.scorePops.splice(0, 8);
+    this.scorePops.push({
+      x,
+      y: y - 14,
+      value: 0,
+      col,
+      life: 0.85,
+      max: 0.85,
+      scale: 1.55,
+      hot: true,
+      text,
+    });
+  }
+
   // ---- drawing ----
   private drawScorePops(): void {
     const ctx = this.ctx;
@@ -1769,13 +1817,13 @@ export class Game {
         s.hot && !this.reducedMotion ? s.x + rnd(2.8, -2.8) : s.x;
       const py =
         s.hot && !this.reducedMotion ? s.y + rnd(2.2, -2.2) : s.y;
-      const fontPx = Math.round(15 * s.scale);
+      const fontPx = Math.round((s.text ? 17 : 15) * s.scale);
       ctx.save();
       ctx.globalAlpha = fade * 0.95;
       ctx.font = `700 ${fontPx}px Chakra Petch, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const label = '+' + s.value.toLocaleString('en-GB');
+      const label = s.text ?? '+' + s.value.toLocaleString('en-GB');
       const tw = ctx.measureText(label).width;
       if (s.hot) {
         const g = ctx.createLinearGradient(px - tw * 0.55, py, px + tw * 0.55, py);
@@ -1785,7 +1833,7 @@ export class Game {
         g.addColorStop(1, '#ffb02e');
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2 + s.scale * 0.35;
-        ctx.shadowColor = '#ff3fa4';
+        ctx.shadowColor = s.text ? '#ffb02e' : '#ff3fa4';
         ctx.shadowBlur = this.reducedMotion ? 0 : 16;
         ctx.strokeText(label, px, py);
         ctx.shadowBlur = this.reducedMotion ? 0 : 12;
@@ -1814,20 +1862,20 @@ export class Game {
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
     ctx.strokeStyle = '#3aa8ff';
-    ctx.globalAlpha = 0.28 * a;
-    ctx.lineWidth = 34;
+    ctx.globalAlpha = 0.22 * a;
+    ctx.lineWidth = 18;
     ctx.stroke();
     ctx.strokeStyle = '#7ad8ff';
-    ctx.globalAlpha = 0.55 * a;
-    ctx.lineWidth = 16;
+    ctx.globalAlpha = 0.5 * a;
+    ctx.lineWidth = 8;
     ctx.stroke();
     ctx.strokeStyle = '#d6f7ff';
     ctx.globalAlpha = 0.9 * a;
-    ctx.lineWidth = 7;
+    ctx.lineWidth = 3.2;
     ctx.stroke();
     ctx.strokeStyle = '#ffffff';
     ctx.globalAlpha = a;
-    ctx.lineWidth = 2.6;
+    ctx.lineWidth = 1.4;
     ctx.stroke();
     ctx.restore();
   }
@@ -1894,8 +1942,8 @@ export class Game {
     const t = h.life / h.max;
     const fade = t > 0.75 ? (1 - t) / 0.25 : t < 0.2 ? t / 0.2 : 1;
     const bob = Math.sin(this.gameT * 3.2) * 3;
-    let lx = h.x + 22;
-    let ly = h.y - 28 + bob;
+    let lx = h.x + 16;
+    let ly = h.y - 22 + bob;
     const label = 'Collect these to increase your multiplier!';
     ctx.save();
     ctx.font = '600 13px Chakra Petch, sans-serif';
@@ -1911,7 +1959,7 @@ export class Game {
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 4]);
     ctx.beginPath();
-    ctx.moveTo(h.x + 10, h.y - 8);
+    ctx.moveTo(h.x + 4, h.y - 4);
     ctx.lineTo(lx - 4, ly);
     ctx.stroke();
     ctx.setLineDash([]);
@@ -1928,32 +1976,30 @@ export class Game {
     ctx.restore();
   }
 
-  /** Distinct octagon + inner cross for multiplier cores. */
+  /** Tiny spinning triangles for multiplier geodes. */
   private drawGem(g: Gem): void {
     const ctx = this.ctx;
-    const fade = g.life < 2 ? (Math.floor(g.life * 10) % 2 ? 0.25 : 1) : 1;
-    const pulse = 1 + Math.sin(this.gameT * 6 + g.ang) * 0.12;
-    const r = 10 * pulse;
+    // Last GEM_FLASH seconds: a couple of blinks, then gone.
+    const fade =
+      g.life < GEM_FLASH ? (Math.floor(g.life * 5.5) % 2 === 0 ? 1 : 0.12) : 1;
+    const pulse = 1 + Math.sin(this.gameT * 6 + g.ang) * 0.1;
+    const r = 3.6 * pulse;
 
     ctx.beginPath();
-    ctx.arc(g.x, g.y, r * 1.55, 0, TAU);
+    ctx.arc(g.x, g.y, r * 1.7, 0, TAU);
     ctx.strokeStyle = GEM_COL_ACCENT;
-    ctx.globalAlpha = 0.22 * fade;
-    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.2 * fade;
+    ctx.lineWidth = 1;
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    this.polyPath(g.x, g.y, 8, r, g.ang);
-    this.stroke2(GEM_COL, 2.2, fade);
+    this.polyPath(g.x, g.y, 3, r, g.ang);
+    this.stroke2(GEM_COL, 1.4, fade);
 
-    ctx.beginPath();
-    ctx.moveTo(g.x - r * 0.55, g.y);
-    ctx.lineTo(g.x + r * 0.55, g.y);
-    ctx.moveTo(g.x, g.y - r * 0.55);
-    ctx.lineTo(g.x, g.y + r * 0.55);
+    this.polyPath(g.x, g.y, 3, r * 0.4, g.ang + Math.PI);
     ctx.strokeStyle = GEM_COL_CORE;
-    ctx.globalAlpha = 0.9 * fade;
-    ctx.lineWidth = 1.6;
+    ctx.globalAlpha = 0.85 * fade;
+    ctx.lineWidth = 1;
     ctx.stroke();
     ctx.globalAlpha = 1;
   }

@@ -12,16 +12,19 @@ import {
 import { sanitizeName } from '../leaderboard/profanity';
 import { burstBoardConfetti, stopConfetti } from './confetti';
 import { resumeAudio, SFX } from '../game/audio';
+import { playMusic, setMusicDucked, unlockMusic } from '../game/music';
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function formatTime(seconds: number): string {
-  const totalMs = Math.floor(Math.max(0, seconds) * 1000);
-  const s = Math.floor(totalMs / 1000);
-  const ms = totalMs % 1000;
-  return `${s}.${String(ms).padStart(3, '0')}`;
+  const totalCs = Math.floor(Math.max(0, seconds) * 100);
+  const cs = totalCs % 100;
+  const totalSec = Math.floor(totalCs / 100);
+  const s = totalSec % 60;
+  const m = Math.floor(totalSec / 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(cs).padStart(2, '0')}`;
 }
 
 type SurvivalHighlight = { kind: 'survival'; name: string; score: number };
@@ -93,7 +96,7 @@ function bossBoardHtml(rows: BossScoreRow[], highlight?: BoardHighlight): string
 function boardTabsHtml(active: 'survival' | 'boss'): string {
   return `<div class="board-tabs" role="tablist" aria-label="Leaderboards">
         <button type="button" class="board-tab${active === 'survival' ? ' active' : ''}" data-board="survival" role="tab" aria-selected="${active === 'survival' ? 'true' : 'false'}">Survival</button>
-        <button type="button" class="board-tab${active === 'boss' ? ' active' : ''}" data-board="boss" role="tab" aria-selected="${active === 'boss' ? 'true' : 'false'}">Boss Mode</button>
+        <button type="button" class="board-tab${active === 'boss' ? ' active' : ''}" data-board="boss" role="tab" aria-selected="${active === 'boss' ? 'true' : 'false'}">Beat the Bosses</button>
       </div>`;
 }
 
@@ -174,6 +177,22 @@ export class Overlays {
     this.panel = document.getElementById('panel')!;
     this.onHideVeil = opts.onHideVeil;
     this.onShowVeil = opts.onShowVeil;
+    this.panel.addEventListener('click', (e) => {
+      const t = (e.target as HTMLElement | null)?.closest('button');
+      if (!t || !this.panel.contains(t)) return;
+      // Launch plays its own long tone from the button handler.
+      if (t.dataset.sfx === 'launch') return;
+      resumeAudio();
+      SFX.uiClick();
+    });
+    this.panel.addEventListener('pointerover', (e) => {
+      const t = (e.target as HTMLElement | null)?.closest('button');
+      if (!t || !this.panel.contains(t)) return;
+      const from = e.relatedTarget as Node | null;
+      if (from && t.contains(from)) return;
+      resumeAudio();
+      SFX.uiHover();
+    });
   }
 
   show(): void {
@@ -190,13 +209,15 @@ export class Overlays {
   async menuPanel(): Promise<void> {
     stopConfetti();
     this.selectingMode = false;
+    setMusicDucked(false);
+    playMusic('menu');
     const [survival, boss] = await Promise.all([fetchTopScores(), fetchBossScores()]);
     this.menuSurvivalScores = survival;
     this.menuBossScores = boss;
     const tab = this.menuBoardTab;
     const scores = tab === 'boss' ? boss : survival;
     this.panel.innerHTML = `
-      <h1 class="glyph">HYPERGON</h1>
+      <h1 class="glyph logo">HYPERGON</h1>
       <div class="keys">
         <div class="key"><b>MOVE</b><span>Arrow keys &nbsp;/&nbsp; WASD &nbsp;/&nbsp; left stick</span></div>
         <div class="key"><b>AIM &amp; FIRE</b><span>Mouse position + hold click &nbsp;/&nbsp; right stick. F locks auto-fire.</span></div>
@@ -206,11 +227,15 @@ export class Overlays {
         <div class="key"><b>MULTIPLIER</b><span>Cyan cores raise it. Dying resets it.</span></div>
       </div>
       ${boardBlock(tab, scores, undefined, { tabs: true })}
-      <button class="cta" id="go" type="button">Launch</button>
+      <button class="cta" id="go" type="button" data-sfx="launch">Launch</button>
       <p class="fine">P pause · M mute · F auto-fire</p>`;
     this.show();
     this.bindMenuBoardTabs();
     document.getElementById('go')!.onclick = () => {
+      resumeAudio();
+      SFX.launch();
+      unlockMusic();
+      playMusic('menu');
       this.modeSelectPanel();
     };
   }
@@ -242,6 +267,9 @@ export class Overlays {
     stopConfetti();
     this.game.state = 'menu';
     this.selectingMode = true;
+    resumeAudio();
+    unlockMusic();
+    playMusic('menu');
     this.panel.innerHTML = `
       <h1 class="glyph" style="font-size:clamp(34px,7vw,74px)">SELECT MODE</h1>
       <p class="tag">choose your gauntlet</p>
@@ -251,7 +279,7 @@ export class Overlays {
           <span class="mode-card-blurb">Endless sectors. Survive the swarm.</span>
         </button>
         <button type="button" class="mode-card" id="mode-boss">
-          <span class="mode-card-title">BOSS MODE</span>
+          <span class="mode-card-title">BEAT THE BOSSES</span>
           <span class="mode-card-blurb">Defeat 20 bosses in a row.</span>
         </button>
       </div>
@@ -281,10 +309,12 @@ export class Overlays {
     this.panel.innerHTML = `
       <h1 class="glyph" style="font-size:clamp(34px,7vw,74px)">HOLDING</h1>
       <p class="tag">Score ${this.game.score.toLocaleString('en-GB')} · ${modeTag}</p>
-      <button class="cta" id="go" type="button">Resume</button>
+      <button class="cta" id="go" type="button" data-sfx="launch">Resume</button>
       <p class="fine">P or Esc</p>`;
     this.show();
     document.getElementById('go')!.onclick = () => {
+      resumeAudio();
+      SFX.launch();
       this.game.togglePause();
     };
   }

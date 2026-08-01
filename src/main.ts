@@ -1,5 +1,7 @@
 import './styles/main.css';
+import { resumeAudio } from './game/audio';
 import { Game } from './game/Game';
+import { playMusic, unlockMusic } from './game/music';
 import { Hud } from './ui/hud';
 import { Overlays } from './ui/overlays';
 import { TouchControls } from './ui/touch';
@@ -84,7 +86,26 @@ function updateOrientHint(): void {
 updateOrientHint();
 addEventListener('resize', updateOrientHint);
 
-void overlays.menuPanel();
+void overlays.menuPanel().finally(() => {
+  const boot = document.getElementById('boot');
+  if (!boot) return;
+  requestAnimationFrame(() => {
+    boot.classList.add('done');
+    const remove = () => boot.remove();
+    boot.addEventListener('transitionend', remove, { once: true });
+    setTimeout(remove, 500);
+  });
+});
+
+function unlockAudioOnce(): void {
+  resumeAudio();
+  unlockMusic();
+  playMusic('menu');
+  window.removeEventListener('pointerdown', unlockAudioOnce);
+  window.removeEventListener('keydown', unlockAudioOnce);
+}
+window.addEventListener('pointerdown', unlockAudioOnce);
+window.addEventListener('keydown', unlockAudioOnce);
 
 let last = performance.now();
 function frame(now: number): void {

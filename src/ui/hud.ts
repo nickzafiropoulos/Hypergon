@@ -2,10 +2,12 @@ import { WEAPONS, type WeaponKey } from '../game/catalogue';
 import type { Game } from '../game/Game';
 
 function formatHudTimer(seconds: number): string {
-  const totalMs = Math.floor(Math.max(0, seconds) * 1000);
-  const s = Math.floor(totalMs / 1000);
-  const ms = totalMs % 1000;
-  return `${s}.${String(ms).padStart(3, '0')}`;
+  const totalCs = Math.floor(Math.max(0, seconds) * 100);
+  const cs = totalCs % 100;
+  const totalSec = Math.floor(totalCs / 100);
+  const s = totalSec % 60;
+  const m = Math.floor(totalSec / 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(cs).padStart(2, '0')}`;
 }
 
 export class Hud {

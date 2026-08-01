@@ -195,9 +195,9 @@ export class EnvSystem {
       if (boss && p.hurtBoss && len(boss.x - p.x, boss.y - p.y) < p.r + boss.r * 0.85) {
         if (p.kind === 'mine') {
           this.destroyProp(p, hooks);
-          onHurtBoss(28);
+          onHurtBoss(48);
         } else if (p.kind === 'spike') {
-          onHurtBoss(18 * dt);
+          onHurtBoss(32 * dt);
           // soft push boss inward
           const [nx, ny] = norm(hooks.W / 2 - boss.x, hooks.H / 2 - boss.y);
           boss.vx += nx * 40 * dt;

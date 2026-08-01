@@ -18,6 +18,8 @@ export type DamageCtx = {
   railTelegraph?: boolean;
   /** Twin helix: which body index was hit (0 primary, 1 twin). */
   twinIndex?: number;
+  /** Player bullet bounce count off reflective geometry. */
+  ricochet?: number;
 };
 
 export type DamageResult = {
@@ -121,8 +123,8 @@ export function computeBossDamage(
     }
     case 'railbait': {
       if (ctx.source === 'rail' && (ctx.railTelegraph || (boss.flags.telegraph || 0) > 0)) {
-        mul = 3.2;
-        message = 'CRIT';
+        mul = 5.2;
+        message = 'CRITICAL HIT';
       } else if (ctx.source === 'rail') mul = 1.1;
       break;
     }
@@ -159,8 +161,23 @@ export function computeBossDamage(
 
   if (blocked) return { applied: 0, blocked: true, message };
 
+  // Environmental assists — ricochets and arena traps hit much harder.
+  const bounces = ctx.ricochet ?? 0;
+  if (bounces > 0 && ctx.source !== 'bomb') {
+    mul *= 4.2 + Math.min(bounces - 1, 2) * 0.9;
+    message = 'CRITICAL HIT';
+  }
+  if ((ctx.source === 'mine' || ctx.source === 'env') && !blocked) {
+    mul *= 3.8;
+    message = 'CRITICAL HIT';
+  }
+
   const applied = Math.max(0, amount * mul);
-  return { applied, blocked: false, message: applied > amount * 1.4 ? message : undefined };
+  const keepMsg =
+    message === 'CRITICAL HIT' ||
+    message === 'PLATE STRIPPED' ||
+    (message !== undefined && applied > amount * 1.35);
+  return { applied, blocked: false, message: keepMsg ? message : undefined };
 }
 
 export function bombDamageFor(boss: BossRuntime, def: BossDef): DamageResult {
