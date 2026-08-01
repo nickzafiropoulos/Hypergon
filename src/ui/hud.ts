@@ -1,12 +1,22 @@
 import { WEAPONS, type WeaponKey } from '../game/catalogue';
 import type { Game } from '../game/Game';
 
+function formatHudTimer(seconds: number): string {
+  const totalMs = Math.floor(Math.max(0, seconds) * 1000);
+  const s = Math.floor(totalMs / 1000);
+  const ms = totalMs % 1000;
+  return `${s}.${String(ms).padStart(3, '0')}`;
+}
+
 export class Hud {
   private shownScore = 0;
   private el: {
     score: HTMLElement;
     mult: HTMLElement;
     wave: HTMLElement;
+    waveLbl: HTMLElement;
+    timer: HTMLElement;
+    timerLbl: HTMLElement;
     pips: HTMLElement;
     wname: HTMLElement;
     wfill: HTMLElement;
@@ -16,12 +26,16 @@ export class Hud {
   };
   private lastPips = '';
   private lastBuffs = '';
+  private lastTimer = '';
 
   constructor() {
     this.el = {
       score: document.getElementById('score')!,
       mult: document.getElementById('mult')!,
       wave: document.getElementById('wave')!,
+      waveLbl: document.getElementById('wave-lbl')!,
+      timer: document.getElementById('timer')!,
+      timerLbl: document.getElementById('timer-lbl')!,
       pips: document.getElementById('pips')!,
       wname: document.getElementById('wname')!,
       wfill: document.getElementById('wfill')!,
@@ -42,7 +56,25 @@ export class Hud {
     this.el.score.textContent = Math.round(this.shownScore).toLocaleString('en-GB');
     this.el.mult.textContent = '×' + game.mult;
     this.el.mult.style.fontSize = 30 + Math.min(game.mult, 40) * 0.35 + 'px';
-    this.el.wave.textContent = String(game.sector).padStart(2, '0');
+    if (game.mode === 'boss') {
+      this.el.waveLbl.textContent = 'Boss';
+      this.el.wave.textContent = game.bosses.progressLabel();
+      this.el.wave.style.fontSize = '16px';
+      this.el.timerLbl.classList.remove('hide');
+      this.el.timer.classList.remove('hide');
+      const stamp = formatHudTimer(game.elapsed);
+      if (this.lastTimer !== stamp) {
+        this.el.timer.textContent = stamp;
+        this.lastTimer = stamp;
+      }
+    } else {
+      this.el.waveLbl.textContent = 'Sector';
+      this.el.wave.textContent = String(game.sector).padStart(2, '0');
+      this.el.wave.style.fontSize = '';
+      this.el.timerLbl.classList.add('hide');
+      this.el.timer.classList.add('hide');
+      this.lastTimer = '';
+    }
 
     const pipKey = game.lives + '/' + game.bombs;
     if (this.lastPips !== pipKey) {

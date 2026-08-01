@@ -37,9 +37,11 @@ create table if not exists public.game_sessions (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  mode text not null default 'survival' check (mode in ('survival', 'boss')),
   last_score integer not null default 0 check (last_score >= 0),
   last_kills integer not null default 0 check (last_kills >= 0),
   last_sector integer not null default 1 check (last_sector >= 1),
+  last_bosses integer not null default 0 check (last_bosses >= 0 and last_bosses <= 20),
   last_elapsed double precision not null default 0 check (last_elapsed >= 0),
   beats integer not null default 0 check (beats >= 0),
   autofire boolean not null default false,
@@ -52,6 +54,30 @@ create index if not exists game_sessions_updated_idx
 alter table public.game_sessions enable row level security;
 revoke all on table public.game_sessions from anon, authenticated;
 grant all on table public.game_sessions to service_role;
+
+create table if not exists public.boss_scores (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) between 2 and 12),
+  bosses_killed integer not null check (bosses_killed > 0 and bosses_killed <= 20),
+  elapsed double precision not null check (elapsed >= 0),
+  autofire boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists boss_scores_rank_idx
+  on public.boss_scores (bosses_killed desc, elapsed asc);
+
+alter table public.boss_scores enable row level security;
+
+grant select on public.boss_scores to anon, authenticated;
+revoke insert, update, delete on public.boss_scores from anon, authenticated;
+grant all on table public.boss_scores to service_role;
+
+drop policy if exists "Public read boss scores" on public.boss_scores;
+create policy "Public read boss scores"
+  on public.boss_scores for select
+  to anon, authenticated
+  using (true);
 
 create table if not exists public.callsigns (
   name_key text primary key,

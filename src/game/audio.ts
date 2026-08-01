@@ -273,6 +273,21 @@ export const SFX = {
     });
   },
 
+  /** Score submitted — bright ascending fanfare. */
+  transmit() {
+    chord(392, 494, 0.1, 'sine', 0.055, 60);
+    later(90, () => chord(523, 659, 0.12, 'sine', 0.06, 80));
+    later(190, () => chord(659, 784, 0.14, 'sine', 0.065, 100));
+    later(300, () => {
+      chord(784, 1047, 0.28, 'sine', 0.07, 160);
+      tone(1568, 0.18, 'triangle', 0.03, 80);
+    });
+    later(420, () => {
+      noise(0.12, 0.06, 3200, 'highpass');
+      tone(2093, 0.1, 'sine', 0.025, -200);
+    });
+  },
+
   singularity() {
     tone(70, 0.4, 'sine', 0.07, -20);
     later(100, () => noise(0.3, 0.1, 600));

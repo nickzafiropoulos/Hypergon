@@ -24,7 +24,8 @@ let overlays!: Overlays;
 let touch!: TouchControls;
 const hud = new Hud();
 
-const game = new Game(canvas, {
+let game!: Game;
+game = new Game(canvas, {
   toast,
   onPause: () => {
     overlays.pausePanel();
@@ -35,12 +36,25 @@ const game = new Game(canvas, {
     touch.setPlaying(true);
   },
   onEnterPlay: () => {
+    overlays.selectingMode = false;
     overlays.hide();
     touch.setPlaying(true);
   },
   onGameOver: (stats) => {
     touch.setPlaying(false);
     void overlays.overPanel(stats);
+  },
+  onVictory: (stats) => {
+    touch.setPlaying(false);
+    void overlays.victoryPanel(stats);
+  },
+  onModeSelect: () => {
+    if (overlays.selectingMode) {
+      overlays.selectingMode = false;
+      game.startRun('survival');
+    } else {
+      overlays.modeSelectPanel();
+    }
   },
 });
 
@@ -88,7 +102,7 @@ function frame(now: number): void {
     if (toastT <= 0) toastEl.style.opacity = '0';
   }
 
-  if (game.state === 'play' || game.state === 'over') {
+  if (game.state === 'play' || game.state === 'over' || game.state === 'win') {
     if (game.state === 'play') game.update(dt);
     else {
       game.grid.update(dt);

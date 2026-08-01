@@ -88,6 +88,17 @@ canvas {
   color: var(--ion);
   font-size: 18px;
 }
+.hud-timer-lbl {
+  margin-top: 8px;
+}
+.hud-timer {
+  color: var(--amber);
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+.hide {
+  display: none !important;
+}
 .right {
   text-align: right;
   align-items: flex-end;
@@ -218,8 +229,19 @@ canvas {
   display: none;
 }
 .panel {
+  position: relative;
+  z-index: 1;
   width: min(880px, 92vw);
   text-align: center;
+}
+canvas.screen-confetti {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  display: block;
 }
 .glyph {
   font-size: clamp(46px, 9vw, 104px);
@@ -315,6 +337,46 @@ canvas {
 .cta-stack .cta.secondary {
   padding: 14px 16px;
 }
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0 0 28px;
+  text-align: left;
+}
+.mode-card {
+  font: inherit;
+  pointer-events: auto;
+  cursor: pointer;
+  background: #070a18;
+  border: 1px solid rgba(99, 247, 255, 0.28);
+  padding: 22px 20px 24px;
+  color: #eaf6ff;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.mode-card:hover,
+.mode-card:focus-visible {
+  border-color: var(--ion);
+  background: rgba(99, 247, 255, 0.08);
+  box-shadow: 0 0 28px rgba(99, 247, 255, 0.2);
+  outline: none;
+}
+.mode-card-title {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--ion);
+  margin-bottom: 10px;
+}
+.mode-card-blurb {
+  display: block;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ash);
+  letter-spacing: 0.02em;
+}
 .fine {
   margin-top: 20px;
   font-size: 12px;
@@ -336,8 +398,16 @@ canvas {
   font-size: 34px;
 }
 
-.board-wrap {
+.board-stage {
+  position: relative;
   margin: 12px 0 36px;
+  padding: 0;
+  isolation: isolate;
+}
+.board-wrap {
+  position: relative;
+  z-index: 1;
+  margin: 0;
   width: 100%;
   text-align: left;
   border: 1px solid rgba(99, 247, 255, 0.28);
@@ -374,6 +444,52 @@ canvas {
   text-align: center;
   filter: drop-shadow(0 0 16px rgba(99, 247, 255, 0.3));
 }
+.board-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin: 0 0 16px;
+  border: 1px solid rgba(99, 247, 255, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+.board-tab {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ash);
+  background: transparent;
+  border: 0;
+  padding: 12px 10px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.board-tab:hover {
+  color: #eaf6ff;
+  background: rgba(99, 247, 255, 0.06);
+}
+.board-tab.active {
+  color: #fff;
+  background: linear-gradient(
+    90deg,
+    rgba(99, 247, 255, 0.28),
+    rgba(255, 176, 46, 0.16) 55%,
+    rgba(255, 63, 164, 0.12)
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(99, 247, 255, 0.65),
+    0 0 22px rgba(99, 247, 255, 0.2);
+  text-shadow: 0 0 12px rgba(99, 247, 255, 0.35);
+}
+.board-tab:focus-visible {
+  outline: 2px solid var(--plasma);
+  outline-offset: -2px;
+}
+.board-tab + .board-tab {
+  border-left: 1px solid rgba(99, 247, 255, 0.22);
+}
 .board-empty {
   margin: 0;
   padding: 28px 16px 24px;
@@ -399,6 +515,15 @@ canvas {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 14px;
   letter-spacing: 0.1em;
+}
+.board.board-boss li {
+  grid-template-columns: 44px 1fr auto auto;
+}
+.board .bosses {
+  color: var(--ion);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 .board li:nth-child(odd) {
   background: rgba(99, 247, 255, 0.03);
@@ -449,6 +574,48 @@ canvas {
   font-weight: 600;
   letter-spacing: 0.06em;
 }
+.board li.mine {
+  position: relative;
+  background: linear-gradient(
+    90deg,
+    rgba(99, 247, 255, 0.28),
+    rgba(255, 176, 46, 0.16) 55%,
+    rgba(255, 63, 164, 0.12)
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(99, 247, 255, 0.65),
+    0 0 22px rgba(99, 247, 255, 0.2);
+  animation: mine-pulse 1.1s ease-in-out 4;
+}
+.board li.mine .rank {
+  color: var(--amber);
+  text-shadow: 0 0 14px rgba(255, 176, 46, 0.55);
+}
+.board li.mine .pts {
+  color: #fff;
+}
+.board li.mine .who-name {
+  color: #fff;
+  font-weight: 700;
+}
+@keyframes mine-pulse {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(99, 247, 255, 0.55),
+      0 0 14px rgba(99, 247, 255, 0.12);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 176, 46, 0.85),
+      0 0 28px rgba(255, 176, 46, 0.28);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board li.mine {
+    animation: none;
+  }
+}
 
 .submit-row {
   display: flex;
@@ -485,6 +652,34 @@ canvas {
 }
 .form-msg.err {
   color: var(--plasma);
+}
+.submit-done {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 0 22px;
+  min-height: 72px;
+}
+.submit-tick {
+  width: 56px;
+  height: 56px;
+  filter: drop-shadow(0 0 16px rgba(99, 247, 255, 0.45));
+  animation: submit-pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes submit-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .submit-tick {
+    animation: none;
+  }
 }
 
 /* ---------- touch UI ---------- */
@@ -614,8 +809,16 @@ canvas {
     padding: 16px 28px;
     width: min(100%, 320px);
   }
-  .board-wrap {
+  .mode-cards {
+    grid-template-columns: 1fr;
+    margin-bottom: 18px;
+  }
+  .board-stage {
     margin: 8px auto 28px;
+    padding: 0;
+  }
+  .board-wrap {
+    margin: 0;
     padding: 18px 14px 12px;
   }
 }

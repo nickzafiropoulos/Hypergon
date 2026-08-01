@@ -1,4 +1,4 @@
-import { depthScale, projectBowl } from './depth';
+import { bankScale, depthScale, flipScale, projectBowl } from './depth';
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -22,5 +22,11 @@ assert(farther.depth >= edge.depth, 'farther points have >= depth');
 assert(Math.abs(depthScale(0) - 1.2) < 1e-9, 'near scale');
 assert(Math.abs(depthScale(1) - 0.55) < 1e-9, 'far scale');
 assert(depthScale(0.5) > 0.55 && depthScale(0.5) < 1.2, 'mid scale');
+
+assert(Math.abs(flipScale(0) - 1) < 1e-9, 'flip face-on');
+assert(flipScale(Math.PI / 2) === 0.22, 'flip edge clamped');
+assert(flipScale(Math.PI / 2, 0.3) === 0.3, 'flip custom min');
+assert(bankScale(0, 0) === 1, 'bank at rest');
+assert(bankScale(300, 0) < 1 && bankScale(300, 0) >= 0.78, 'bank when moving');
 
 console.log('depth tests passed');

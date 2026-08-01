@@ -126,6 +126,13 @@ Without the function deployed, the game still plays; online submit will say ther
 
 Callsigns are unique (case-insensitive). The first successful submit binds the name to that client IP; later submits with the same name are allowed only from that IP. Anyone else gets “Callsign already taken.”
 
+#### E. Boss Mode leaderboard
+
+1. Paste [`supabase/migrate-boss-scores.sql`](supabase/migrate-boss-scores.sql) → **Run**  
+2. Redeploy the `leaderboard` Edge Function  
+
+Boss Mode uses a separate `boss_scores` table (bosses cleared + run time). Survival still uses `scores`.
+
 ## Deploy
 
 ### GitHub Pages (default)

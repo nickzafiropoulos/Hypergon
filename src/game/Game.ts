@@ -6,6 +6,7 @@ import {
   MAX_ENEMIES,
   MAX_GEMS,
   POWERS,
+  SHIP_MAGNET,
   WEAPONS,
   WORDER,
   type EnemyType,
@@ -14,7 +15,8 @@ import {
 } from './catalogue';
 import { resumeAudio, SFX, toggleMute, isMuted } from './audio';
 import { WarpGrid } from './grid';
-import { depthScale } from './depth';
+import { depthScale, flipScale } from './depth';
+import { BossDirector } from './BossDirector';
 import {
   beatGameSession,
   clearSessionToken,
@@ -26,9 +28,11 @@ import type {
   Beam,
   Bolt,
   Bullet,
+  DamageSource,
   Drop,
   EBullet,
   Enemy,
+  GameMode,
   GameState,
   Gem,
   Particle,
@@ -48,7 +52,9 @@ export type GameOverFn = (stats: {
   elapsed: number;
   sector: number;
   autofire: boolean;
+  mode: GameMode;
 }) => void;
+export type VictoryFn = GameOverFn;
 
 function loadBest(): number {
   try {
@@ -74,6 +80,8 @@ export class Game {
   input!: InputSystem;
 
   state: GameState = 'menu';
+  mode: GameMode = 'survival';
+  bosses = new BossDirector();
   enemies: Enemy[] = [];
   bullets: Bullet[] = [];
   ebullets: EBullet[] = [];
@@ -130,6 +138,8 @@ export class Game {
   onResume: OverlayFn;
   onEnterPlay: OverlayFn;
   onGameOver: GameOverFn;
+  onVictory: VictoryFn;
+  onModeSelect: OverlayFn;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -139,6 +149,8 @@ export class Game {
       onResume: OverlayFn;
       onEnterPlay: OverlayFn;
       onGameOver: GameOverFn;
+      onVictory: VictoryFn;
+      onModeSelect: OverlayFn;
     },
   ) {
     this.cvs = canvas;
@@ -154,6 +166,8 @@ export class Game {
     this.onResume = hooks.onResume;
     this.onEnterPlay = hooks.onEnterPlay;
     this.onGameOver = hooks.onGameOver;
+    this.onVictory = hooks.onVictory;
+    this.onModeSelect = hooks.onModeSelect;
 
     this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.isMobile =
@@ -178,7 +192,7 @@ export class Game {
       },
       onCycleWeapon: (d) => this.cycleWeapon(d),
       onBomb: () => this.fireBomb(),
-      onStart: () => this.startRun(),
+      onStart: () => this.handleStartKey(),
       isPlaying: () => this.state === 'play',
       getPlayerPos: () => this.player,
       getSize: () => ({ W: this.W, H: this.H }),
@@ -186,6 +200,17 @@ export class Game {
 
     window.addEventListener('resize', () => this.resize());
     this.resize();
+  }
+
+  /** Enter: landing → mode select; mode select → survival; over/win → retry mode. */
+  handleStartKey(): void {
+    if (this.state === 'over' || this.state === 'win') {
+      this.startRun();
+      return;
+    }
+    if (this.state === 'menu') {
+      this.onModeSelect();
+    }
   }
 
   resize(): void {
@@ -236,6 +261,7 @@ export class Game {
     this.input.autofire = false;
     this.gemHintShown = false;
     this.gemHint = null;
+    this.bosses.reset();
     for (const k of Object.keys(this.buffs) as (keyof typeof this.buffs)[]) {
       this.buffs[k] = 0;
     }
@@ -246,23 +272,120 @@ export class Game {
     this.player.invuln = 2.2;
   }
 
-  startRun(): void {
+  startRun(mode?: GameMode): void {
+    if (mode) this.mode = mode;
     this.resetRun();
     this.state = 'play';
     this.onEnterPlay();
-    this.toast('SECTOR 01', this.sectorName(1), 1500, '#63f7ff');
     resumeAudio();
     SFX.launch();
-    void startGameSession().then((ok) => {
+    if (this.mode === 'boss') {
+      this.bosses.begin(this.bossHost());
+    } else {
+      this.toast('SECTOR 01', this.sectorName(1), 1500, '#63f7ff');
+    }
+    void startGameSession(this.mode).then((ok) => {
       if (ok) void this.pulseSession();
     });
   }
 
+  private bossHost() {
+    const g = this;
+    return {
+      get W() {
+        return g.W;
+      },
+      get H() {
+        return g.H;
+      },
+      get parts() {
+        return g.parts;
+      },
+      get rings() {
+        return g.rings;
+      },
+      get enemies() {
+        return g.enemies;
+      },
+      get drops() {
+        return g.drops;
+      },
+      get player() {
+        return g.player;
+      },
+      get buffs() {
+        return g.buffs;
+      },
+      get score() {
+        return g.score;
+      },
+      set score(v: number) {
+        g.score = v;
+      },
+      get mult() {
+        return g.mult;
+      },
+      get kills() {
+        return g.kills;
+      },
+      set kills(v: number) {
+        g.kills = v;
+      },
+      get sector() {
+        return g.sector;
+      },
+      set sector(v: number) {
+        g.sector = v;
+      },
+      get shake() {
+        return g.shake;
+      },
+      set shake(v: number) {
+        g.shake = v;
+      },
+      get elapsed() {
+        return g.elapsed;
+      },
+      set elapsed(v: number) {
+        g.elapsed = v;
+      },
+      toast: g.toast.bind(g),
+      spawnEnemy: (type: EnemyType, x: number, y: number) => g.spawnEnemy(type, x, y),
+      pushScorePop: (x: number, y: number, value: number, col: string) =>
+        g.pushScorePop(x, y, value, col),
+      gridImpulse: (x: number, y: number, force: number, rad: number) =>
+        g.grid.impulse(x, y, force, rad),
+      onBossVictory: () => g.victory(),
+      hurtPlayer: () => g.hurtPlayer(),
+      spawnBossGems: (x: number, y: number, n: number) => {
+        for (let i = 0; i < n; i++) {
+          if (g.gems.length >= MAX_GEMS) break;
+          const a = rnd(TAU);
+          const s = rnd(220, 80);
+          g.gems.push({
+            x,
+            y,
+            vx: Math.cos(a) * s,
+            vy: Math.sin(a) * s,
+            life: 10,
+            ang: rnd(TAU),
+          });
+        }
+      },
+      sfxHit: () => SFX.hit(),
+      sfxPop: () => SFX.pop(g.hitChain),
+      sfxBig: () => SFX.big(),
+      sfxBounce: () => SFX.bounce(),
+    };
+  }
+
   private sessionStats() {
     return {
+      mode: this.mode,
       score: this.score,
       kills: this.kills,
       sector: this.sector,
+      bosses_killed: this.mode === 'boss' ? this.bosses.cleared : 0,
       elapsed: this.elapsed,
       autofire: this.usedAutofire,
     };
@@ -302,11 +425,40 @@ export class Game {
           best: this.best,
           kills: this.kills,
           elapsed: this.elapsed,
-          sector: this.sector,
+          sector: this.mode === 'boss' ? this.bosses.cleared : this.sector,
           autofire: this.usedAutofire,
+          mode: this.mode,
         });
       }
     }, 900);
+  }
+
+  victory(): void {
+    if (this.state !== 'play') return;
+    this.state = 'win';
+    void this.pulseSession();
+    if (this.score > this.best) {
+      this.best = this.score;
+      try {
+        localStorage.setItem('hypergon.best', String(this.best));
+      } catch {
+        /* ignore */
+      }
+    }
+    setTimeout(() => {
+      if (this.state === 'win') {
+        SFX.big();
+        this.onVictory({
+          score: this.score,
+          best: this.best,
+          kills: this.kills,
+          elapsed: this.elapsed,
+          sector: 20,
+          autofire: this.usedAutofire,
+          mode: 'boss',
+        });
+      }
+    }, 1100);
   }
 
   cycleWeapon(dir: number): void {
@@ -336,8 +488,9 @@ export class Game {
     col: string,
     pierce: number,
     life = 1.6,
+    src: DamageSource = 'pulse',
   ): Bullet {
-    return { x, y, vx, vy, dmg, r, col, pierce, life, homing: false, rail: false, px: x, py: y };
+    return { x, y, vx, vy, dmg, r, col, pierce, life, homing: false, rail: false, px: x, py: y, src };
   }
 
   private RECOIL: Record<WeaponKey, number> = {
@@ -379,7 +532,18 @@ export class Game {
           const nx = -ay;
           const ny = ax;
           this.bullets.push(
-            this.mkBullet(px + nx * off, py + ny * off, ax * 1180 * spd, ay * 1180 * spd, w.dmg, 3, w.colour, 1),
+            this.mkBullet(
+              px + nx * off,
+              py + ny * off,
+              ax * 1180 * spd,
+              ay * 1180 * spd,
+              w.dmg,
+              3,
+              w.colour,
+              1,
+              1.6,
+              'pulse',
+            ),
           );
         }
         SFX.shoot();
@@ -399,6 +563,7 @@ export class Game {
               w.colour,
               1,
               0.45,
+              'scatter',
             ),
           );
         }
@@ -420,6 +585,7 @@ export class Game {
             w.colour,
             1,
             2.4,
+            'swarm',
           );
           b.homing = true;
           this.bullets.push(b);
@@ -435,7 +601,7 @@ export class Game {
         break;
       }
       case 'rail': {
-        const b = this.mkBullet(px, py, ax * 2600, ay * 2600, w.dmg, 10, '#e8fbff', 99, 1.15);
+        const b = this.mkBullet(px, py, ax * 2600, ay * 2600, w.dmg, 10, '#e8fbff', 99, 1.15, 'rail');
         b.rail = true;
         this.bullets.push(b);
         this.railFlashes.push({ x: px, y: py, ax, ay, life: 0.32, max: 0.32 });
@@ -456,6 +622,7 @@ export class Game {
     const hitIds = new Set<Enemy>();
     let hops = 0;
     let reach = 460;
+    let hitBoss = false;
     while (hops < 4) {
       let best: Enemy | null = null;
       let bd = reach * reach;
@@ -471,6 +638,30 @@ export class Game {
         if (d2 < bd) {
           bd = d2;
           best = e;
+        }
+      }
+      // Prefer boss if closer / in cone on first hops
+      if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead && !hitBoss) {
+        const b = this.bosses.boss;
+        const dx = b.x - from.x;
+        const dy = b.y - from.y;
+        const d2 = dx * dx + dy * dy;
+        let ok = true;
+        if (hops === 0) {
+          const a = Math.atan2(dy, dx);
+          if (Math.abs(angDiff(a, Math.atan2(ay, ax))) > 0.9) ok = false;
+        }
+        if (ok && d2 < bd) {
+          pts.push({ x: b.x, y: b.y });
+          this.bosses.tryHit(this.bossHost(), b.x, b.y, 8, dmg * (1 - hops * 0.12), 'arc', {
+            ang: Math.atan2(b.y - from.y, b.x - from.x),
+          });
+          spark(this.parts, b.x, b.y, '#d5c6ff', 8, 240, 0.45, 2);
+          from = b;
+          reach = 300;
+          hops++;
+          hitBoss = true;
+          continue;
         }
       }
       if (!best) break;
@@ -495,6 +686,7 @@ export class Game {
     ringFx(this.rings, this.player.x, this.player.y, '#ffffff', 30, Math.max(this.W, this.H) * 0.8, 0.75);
     ringFx(this.rings, this.player.x, this.player.y, '#63f7ff', 10, Math.max(this.W, this.H) * 0.55, 1.0);
     for (const e of this.enemies) if (!e.dead) this.killEnemy(e, true);
+    if (this.mode === 'boss') this.bosses.applyBomb(this.bossHost());
     this.ebullets.length = 0;
     spark(this.parts, this.player.x, this.player.y, '#ffffff', 60, 700, 1.1, 3);
   }
@@ -861,19 +1053,35 @@ export class Game {
     if (st.firing) this.shoot(ax, ay, dt);
     const beam = this.beam as Beam | null;
 
-    if (sp > 60 && Math.random() < 0.55) {
-      const [nx, ny] = norm(-this.player.vx, -this.player.vy);
-      pushParticle(this.parts, {
-        x: this.player.x + nx * 10,
-        y: this.player.y + ny * 10,
-        vx: nx * rnd(180, 60) + rnd(50, -50),
-        vy: ny * rnd(180, 60) + rnd(50, -50),
-        life: rnd(0.36, 0.14),
-        max: 0.36,
-        col: this.buffs.overdrive > 0 ? '#ffb02e' : '#63f7ff',
-        size: 2,
-        drag: 0.93,
-      });
+    // Sparkly thruster trail — thin, dense, fades out toward the tip.
+    if (this.player.thrust > 0.04) {
+      const bx = -Math.cos(this.player.ang);
+      const by = -Math.sin(this.player.ang);
+      const px = -by;
+      const py = bx;
+      const od = this.buffs.overdrive > 0;
+      const cols = od
+        ? (['#ffb02e', '#ffe08a', '#ffffff', '#ff7a3d'] as const)
+        : (['#ffffff', '#7cf9ff', '#63f7ff', '#eaf6ff'] as const);
+      const n = 3 + ((this.player.thrust * 5 + Math.random() * 2) | 0);
+      for (let i = 0; i < n; i++) {
+        const side = rnd(1.1, -1.1);
+        const back = 8 + rnd(5);
+        const twinkle = Math.random() < 0.3;
+        const spit = 210 + this.player.thrust * 240;
+        pushParticle(this.parts, {
+          x: this.player.x + bx * back + px * side,
+          y: this.player.y + by * back + py * side,
+          vx: bx * rnd(spit, spit * 0.6) + px * rnd(10, -10) - this.player.vx * 0.5,
+          vy: by * rnd(spit, spit * 0.6) + py * rnd(10, -10) - this.player.vy * 0.5,
+          life: twinkle ? rnd(0.65, 0.3) : rnd(1.45, 0.85),
+          max: twinkle ? 0.65 : 1.45,
+          col: cols[(Math.random() * cols.length) | 0]!,
+          size: twinkle ? rnd(2.0, 1.0) : rnd(1.35, 0.45),
+          drag: twinkle ? 0.945 : 0.98,
+          z: rnd(0.22, 0.06),
+        });
+      }
     }
 
     this.droneAng += dt * 2.1;
@@ -894,10 +1102,24 @@ export class Game {
               best = e;
             }
           }
-          if (best && bd < 560 * 560) {
+          let tx = best?.x;
+          let ty = best?.y;
+          if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+            const b = this.bosses.boss;
+            const q = (b.x - dx) ** 2 + (b.y - dy) ** 2;
+            if (q < bd) {
+              bd = q;
+              tx = b.x;
+              ty = b.y;
+              best = null;
+            }
+          }
+          if ((best || tx !== undefined) && bd < 560 * 560) {
             this.droneCd[d] = 0.3;
-            const [bx, by] = norm(best.x - dx, best.y - dy);
-            this.bullets.push(this.mkBullet(dx, dy, bx * 980, by * 980, 0.9, 2.4, '#ff8fd0', 1, 1.1));
+            const [bx, by] = norm((tx ?? 0) - dx, (ty ?? 0) - dy);
+            this.bullets.push(
+              this.mkBullet(dx, dy, bx * 980, by * 980, 0.9, 2.4, '#ff8fd0', 1, 1.1, 'drone'),
+            );
             SFX.drone();
           }
         }
@@ -922,6 +1144,27 @@ export class Game {
           if (Math.random() < 0.5) spark(this.parts, e.x, e.y, '#ff8fd0', 1, 120, 0.2, 1.6);
         }
       }
+      if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+        const boss = this.bosses.boss;
+        const dx = boss.x - this.player.x;
+        const dy = boss.y - this.player.y;
+        const t = dx * bx + dy * by;
+        if (t > 0 && t < end) {
+          const perp = Math.abs(dx * by - dy * bx);
+          if (perp < boss.r + 9) {
+            this.bosses.tryHit(
+              this.bossHost(),
+              boss.x,
+              boss.y,
+              8,
+              WEAPONS.lance.dmg * dt,
+              'lance',
+              { ang: Math.atan2(dy, dx) },
+            );
+            if (Math.random() < 0.5) spark(this.parts, boss.x, boss.y, '#ff8fd0', 1, 120, 0.2, 1.6);
+          }
+        }
+      }
       for (let i = this.ebullets.length - 1; i >= 0; i--) {
         const b = this.ebullets[i]!;
         const dx = b.x - this.player.x;
@@ -944,7 +1187,8 @@ export class Game {
     this.updateDrops(dt);
     this.updateFx(dt);
     this.grid.update(dt);
-    this.director(dt);
+    if (this.mode === 'boss') this.bosses.update(dt, this.bossHost());
+    else this.director(dt);
     this.shake = Math.max(0, this.shake - dt * 46);
   }
 
@@ -958,20 +1202,33 @@ export class Game {
         b.py = b.y;
       }
       if (b.homing) {
-        let best: Enemy | null = null;
+        let tx = 0;
+        let ty = 0;
         let bd = 420 * 420;
+        let found = false;
         for (const e of this.enemies) {
           if (e.dead || e.birth > 0) continue;
           const q = (e.x - b.x) ** 2 + (e.y - b.y) ** 2;
           if (q < bd) {
             bd = q;
-            best = e;
+            tx = e.x;
+            ty = e.y;
+            found = true;
           }
         }
-        if (best) {
-          const [tx, ty] = norm(best.x - b.x, best.y - b.y);
-          b.vx = lerp(b.vx, tx * 760, 1 - Math.pow(0.0007, dt));
-          b.vy = lerp(b.vy, ty * 760, 1 - Math.pow(0.0007, dt));
+        if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+          const boss = this.bosses.boss;
+          const q = (boss.x - b.x) ** 2 + (boss.y - b.y) ** 2;
+          if (q < bd) {
+            tx = boss.x;
+            ty = boss.y;
+            found = true;
+          }
+        }
+        if (found) {
+          const [hx, hy] = norm(tx - b.x, ty - b.y);
+          b.vx = lerp(b.vx, hx * 760, 1 - Math.pow(0.0007, dt));
+          b.vy = lerp(b.vy, hy * 760, 1 - Math.pow(0.0007, dt));
         } else {
           b.vx *= 1.012;
           b.vy *= 1.012;
@@ -1012,6 +1269,43 @@ export class Game {
       if (b.life <= 0 || b.x < -40 || b.x > this.W + 40 || b.y < -40 || b.y > this.H + 40) {
         this.bullets.splice(i, 1);
         continue;
+      }
+      if (this.mode === 'boss') {
+        const src = b.src || (b.rail ? 'rail' : b.homing ? 'swarm' : 'pulse');
+        const hit = this.bosses.tryHit(this.bossHost(), b.x, b.y, b.r, b.dmg, src, {
+          ang: Math.atan2(b.vy, b.vx),
+        });
+        if (hit === 'env' && !b.rail) {
+          // Reflective pillar bounce
+          const block = this.bosses.env.tryBlockBullet(b.x, b.y, b.r);
+          if (block?.reflective) {
+            const [nx, ny] = norm(b.x - block.hit.x, b.y - block.hit.y);
+            b.vx = nx * 760 + rnd(160, -160);
+            b.vy = ny * 760 + rnd(160, -160);
+            b.life = Math.min(b.life, 0.5);
+            spark(this.parts, b.x, b.y, block.hit.col, 4, 180, 0.25, 2);
+            SFX.bounce();
+            continue;
+          }
+          b.pierce--;
+          if (b.pierce <= 0) {
+            spark(this.parts, b.x, b.y, b.col, 4, 180, 0.25, 2);
+            this.bullets.splice(i, 1);
+            continue;
+          }
+        } else if (hit === 'boss' || hit === 'decoy') {
+          b.pierce--;
+          if (b.pierce <= 0) {
+            spark(this.parts, b.x, b.y, b.col, 4, 180, 0.25, 2);
+            this.bullets.splice(i, 1);
+            continue;
+          }
+        } else if (hit === 'body') {
+          // serpent body — no damage, bullet stops
+          spark(this.parts, b.x, b.y, b.col, 3, 120, 0.2, 1.6);
+          this.bullets.splice(i, 1);
+          continue;
+        }
       }
       for (const e of this.enemies) {
         if (e.dead || e.birth > 0) continue;
@@ -1254,29 +1548,77 @@ export class Game {
         }
       }
     }
+    if (this.mode === 'boss' && this.bosses.touchesPlayer(this.player)) {
+      this.hurtPlayer();
+    }
+  }
+
+  /** Pull a loose pickup toward the ship — stronger when closer; LODESTONE widens the field. */
+  private applyShipMagnet(
+    o: { x: number; y: number; vx: number; vy: number },
+    dt: number,
+    dx: number,
+    dy: number,
+    d: number,
+  ): void {
+    const lode = this.buffs.magnet > 0;
+    const magR = lode ? SHIP_MAGNET.lodeRadius : SHIP_MAGNET.radius;
+    if (d >= magR || d < 1e-4) return;
+
+    const nx = dx / d;
+    const ny = dy / d;
+    const proximity = 1 - d / magR;
+    const pull = proximity * proximity;
+    const strength = lode ? SHIP_MAGNET.lodeStrength : SHIP_MAGNET.strength;
+    const f = (strength * (0.35 + pull * 0.65)) / Math.max(d, 12);
+    o.vx += nx * f * dt * 7;
+    o.vy += ny * f * dt * 7;
+
+    if (d < SHIP_MAGNET.snapRadius) {
+      const t = 1 - d / SHIP_MAGNET.snapRadius;
+      // Kill sideways drift so gems don't orbit when the ship moves.
+      const radial = o.vx * nx + o.vy * ny;
+      const kill = 0.15 + t * 0.55;
+      o.vx = o.vx * (1 - kill) + nx * Math.max(radial, 0) * kill;
+      o.vy = o.vy * (1 - kill) + ny * Math.max(radial, 0) * kill;
+      const snap = SHIP_MAGNET.snapSpeed * (0.35 + t * 0.65);
+      o.vx += nx * snap * dt;
+      o.vy += ny * snap * dt;
+      // Home onto the hull in the final stretch.
+      const home = Math.min(1, (5 + t * 14) * dt);
+      o.x += dx * home;
+      o.y += dy * home;
+    }
   }
 
   private updateGems(dt: number): void {
-    const magR = this.buffs.magnet > 0 ? 1e4 : 165;
+    const lode = this.buffs.magnet > 0;
+    const magR = lode ? SHIP_MAGNET.lodeRadius : SHIP_MAGNET.radius;
     for (let i = this.gems.length - 1; i >= 0; i--) {
       const g = this.gems[i]!;
-      const dx = this.player.x - g.x;
-      const dy = this.player.y - g.y;
-      const d = len(dx, dy);
-      if (d < magR) {
-        const f = (this.buffs.magnet > 0 ? 1500 : 900) / Math.max(d, 32);
-        g.vx += (dx / d) * f * dt * 6;
-        g.vy += (dy / d) * f * dt * 6;
-      }
-      g.vx *= Math.pow(0.22, dt);
-      g.vy *= Math.pow(0.22, dt);
+      let dx = this.player.x - g.x;
+      let dy = this.player.y - g.y;
+      let d = len(dx, dy);
+      this.applyShipMagnet(g, dt, dx, dy, d);
+      const inSnap = d < SHIP_MAGNET.snapRadius;
+      const inField = d < magR;
+      const damp = inSnap
+        ? Math.pow(0.14, dt)
+        : inField
+          ? Math.pow(0.5, dt)
+          : Math.pow(0.22, dt);
+      g.vx *= damp;
+      g.vy *= damp;
       g.x += g.vx * dt;
       g.y += g.vy * dt;
       g.life -= dt;
       g.ang += dt * 4.2;
       g.x = clamp(g.x, 8, this.W - 8);
       g.y = clamp(g.y, 8, this.H - 8);
-      if (d < this.player.r + 14) {
+      dx = this.player.x - g.x;
+      dy = this.player.y - g.y;
+      d = len(dx, dy);
+      if (d < this.player.r + SHIP_MAGNET.collectPad) {
         this.gems.splice(i, 1);
         this.gemBank++;
         this.score += 2 * this.mult;
@@ -1317,7 +1659,36 @@ export class Game {
       p.bob += dt * 4;
       p.x = clamp(p.x, 24, this.W - 24);
       p.y = clamp(p.y, 24, this.H - 24);
-      this.grid.impulse(p.x, p.y, -0.28, 64);
+      this.grid.impulse(p.x, p.y, -0.42, 78);
+
+      const meta = p.kind === 'weapon' ? WEAPONS[p.key as WeaponKey] : POWERS[p.key as PowerKey];
+      const col = ('colour' in meta ? meta.colour : meta.col) as string;
+      const bob = Math.sin(p.bob) * 3;
+
+      if (!this.reducedMotion) {
+        // Rising orbit sparkles around the pickup.
+        if (Math.random() < 0.7) {
+          const a = p.ang * 2.4 + rnd(TAU);
+          const rad = 14 + rnd(16);
+          pushParticle(this.parts, {
+            x: p.x + Math.cos(a) * rad,
+            y: p.y + bob + Math.sin(a) * rad * 0.45,
+            vx: Math.cos(a + 1.4) * rnd(55, 18) + rnd(20, -20),
+            vy: -rnd(90, 35) + Math.sin(a) * rnd(25, -10),
+            life: rnd(0.65, 0.28),
+            max: 0.65,
+            col: Math.random() < 0.35 ? '#ffffff' : col,
+            size: rnd(2.4, 0.9),
+            drag: 0.9,
+            z: rnd(0.25, 0.08),
+          });
+        }
+        // Occasional aura pulse.
+        if (Math.random() < 0.012) {
+          ringFx(this.rings, p.x, p.y + bob, col, 10, 48, 0.5);
+        }
+      }
+
       if (len(this.player.x - p.x, this.player.y - p.y) < this.player.r + 22) {
         this.collect(p);
         this.drops.splice(i, 1);
@@ -1371,9 +1742,9 @@ export class Game {
     if (value <= 0) return;
     this.hitChain++;
     this.hitChainT = 2;
-    // 7 chained hits → 4× (hard cap).
-    const scale = clamp(1 + ((this.hitChain - 1) / 6) * 3, 1, 4);
-    const hot = scale >= 4;
+    // 7 chained hits → 2.4× (hard cap).
+    const scale = clamp(1 + ((this.hitChain - 1) / 6) * 1.4, 1, 2.4);
+    const hot = scale >= 2.4;
     if (this.hitChain === 7) SFX.comboMax();
     if (this.scorePops.length >= 36) this.scorePops.splice(0, 8);
     this.scorePops.push({
@@ -1381,8 +1752,8 @@ export class Game {
       y: y - 10,
       value,
       col,
-      life: 1,
-      max: 1,
+      life: 0.55,
+      max: 0.55,
       scale,
       hot,
     });
@@ -1498,6 +1869,21 @@ export class Game {
       else ctx.moveTo(px, py);
     }
     ctx.closePath();
+  }
+
+  /** Cosmetic Y foreshortening — draw-only, gated by reduced motion. */
+  private withYFlip(x: number, y: number, sy: number, draw: () => void): void {
+    if (this.reducedMotion || sy >= 0.999) {
+      draw();
+      return;
+    }
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, sy);
+    ctx.translate(-x, -y);
+    draw();
+    ctx.restore();
   }
 
   /** Temporary label on the first multiplier core of a run. */
@@ -1676,6 +2062,90 @@ export class Game {
     }
   }
 
+  /** Floating pickup with tumble, aura rings, orbit motes, and a soft ground shadow. */
+  private drawDrop(p: Drop): void {
+    const ctx = this.ctx;
+    const meta = p.kind === 'weapon' ? WEAPONS[p.key as WeaponKey] : POWERS[p.key as PowerKey];
+    const col = ('colour' in meta ? meta.colour : meta.col) as string;
+    const bob = Math.sin(p.bob) * 3;
+    const fade = p.life < 3 ? (Math.floor(p.life * 8) % 2 ? 0.3 : 1) : 1;
+    const dx = p.x;
+    const dy = p.y + bob;
+    const lift = 10 + bob * 0.35;
+
+    // Soft elliptical shadow — reads as hovering above the grid.
+    if (!this.reducedMotion) {
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + lift + 18, 16, 5.5, 0, 0, TAU);
+      ctx.fillStyle = col;
+      ctx.globalAlpha = 0.12 * fade;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // Pulsing aura discs.
+    const pulse = 0.5 + 0.5 * Math.sin(this.gameT * 5 + p.bob);
+    ctx.beginPath();
+    ctx.arc(dx, dy, 22 + pulse * 6, 0, TAU);
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = (0.18 + pulse * 0.12) * fade;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(dx, dy, 30 + (1 - pulse) * 5, 0, TAU);
+    ctx.globalAlpha = (0.1 + (1 - pulse) * 0.08) * fade;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Orbiting spark motes (drawn, not particles — crisp ring).
+    if (!this.reducedMotion) {
+      for (let i = 0; i < 5; i++) {
+        const a = p.ang * 1.8 + (i / 5) * TAU + this.gameT * 1.4;
+        const rr = 24 + Math.sin(this.gameT * 3 + i) * 3;
+        const mx = dx + Math.cos(a) * rr;
+        const my = dy + Math.sin(a) * rr * 0.42;
+        const tw = 0.55 + 0.45 * Math.sin(this.gameT * 8 + i * 1.7);
+        ctx.beginPath();
+        ctx.arc(mx, my, 1.2 + tw * 1.4, 0, TAU);
+        ctx.fillStyle = i % 2 ? '#ffffff' : col;
+        ctx.globalAlpha = (0.55 + tw * 0.4) * fade;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Tumbled icon body.
+    this.withYFlip(dx, dy, flipScale(p.ang * 0.85), () => {
+      if (p.kind === 'weapon') {
+        this.polyPath(dx, dy, 6, 15, p.ang);
+        this.stroke2(col, 2.2, fade);
+        this.polyPath(dx, dy, 6, 8, -p.ang * 1.4);
+        this.stroke2(col, 1.4, fade);
+      } else {
+        this.starPath(dx, dy, 5, 16, 7, p.ang);
+        this.stroke2(col, 2.2, fade);
+        this.starPath(dx, dy, 5, 9, 4, -p.ang * 1.3);
+        this.stroke2('#ffffff', 1.2, fade * 0.85);
+      }
+    });
+
+    // Bright core glint.
+    ctx.beginPath();
+    ctx.arc(dx, dy, 2.4 + pulse * 1.2, 0, TAU);
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 0.75 * fade;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.font = '600 9px Chakra Petch, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = col;
+    ctx.globalAlpha = 0.85 * fade;
+    ctx.fillText((meta.name || '').slice(0, 9), p.x, p.y + bob + 34);
+    ctx.globalAlpha = 1;
+  }
+
   private drawPlayer(): void {
     const ctx = this.ctx;
     const { player } = this;
@@ -1723,6 +2193,13 @@ export class Game {
         this.stroke2('#ff8fd0', 1.8);
       }
     }
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, 38 + Math.sin(this.gameT * 4) * 2, 0, TAU);
+    ctx.strokeStyle = GEM_COL;
+    ctx.globalAlpha = this.buffs.magnet > 0 ? 0.14 : 0.06;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
     if (this.buffs.magnet > 0) {
       ctx.beginPath();
       ctx.arc(player.x, player.y, 40 + Math.sin(this.gameT * 3) * 6, 0, TAU);
@@ -1832,40 +2309,27 @@ export class Game {
     for (const g of this.gems) this.drawGem(g);
     this.drawGemHint();
 
-    for (const p of this.drops) {
-      const meta = p.kind === 'weapon' ? WEAPONS[p.key as WeaponKey] : POWERS[p.key as PowerKey];
-      const col = ('colour' in meta ? meta.colour : meta.col) as string;
-      const bob = Math.sin(p.bob) * 3;
-      const fade = p.life < 3 ? (Math.floor(p.life * 8) % 2 ? 0.3 : 1) : 1;
-      if (p.kind === 'weapon') {
-        this.polyPath(p.x, p.y + bob, 6, 15, p.ang);
-        this.stroke2(col, 2.2, fade);
-        this.polyPath(p.x, p.y + bob, 6, 8, -p.ang * 1.4);
-        this.stroke2(col, 1.4, fade);
-      } else {
-        this.starPath(p.x, p.y + bob, 5, 16, 7, p.ang);
-        this.stroke2(col, 2.2, fade);
-      }
-      ctx.font = '600 9px Chakra Petch, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = col;
-      ctx.globalAlpha = 0.85;
-      ctx.fillText((meta.name || '').slice(0, 9), p.x, p.y + bob + 30);
-      ctx.globalAlpha = 1;
-    }
+    for (const p of this.drops) this.drawDrop(p);
 
     for (const p of this.parts) {
-      const t = p.life / p.max;
+      const lifeT = p.life / p.max;
       const z = this.reducedMotion ? 0.5 : (p.z ?? 0.45);
       const ds = depthScale(z);
-      ctx.globalAlpha = clamp(t, 0, 1) * lerp(0.55, 0.95, 1 - z);
+      const fade = lifeT;
+      ctx.globalAlpha = clamp(fade, 0, 1) * lerp(0.65, 1, 1 - z);
       ctx.strokeStyle = p.col;
-      ctx.lineWidth = (p.size * t + 0.4) * ds;
-      const trail = 0.016 * ds;
+      ctx.lineWidth = (p.size * lifeT + 0.35) * ds;
+      const trail = 0.028 * ds;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
       ctx.lineTo(p.x - p.vx * trail, p.y - p.vy * trail);
       ctx.stroke();
+      if (p.size > 1.4 && fade > 0.3) {
+        ctx.globalAlpha = clamp(fade, 0, 1) * 0.85;
+        ctx.fillStyle = '#ffffff';
+        const g = (0.55 + p.size * 0.22 * fade) * ds;
+        ctx.fillRect(p.x - g * 0.5, p.y - g * 0.5, g, g);
+      }
     }
     ctx.globalAlpha = 1;
 
@@ -1881,6 +2345,7 @@ export class Game {
       ctx.globalAlpha = 1;
     }
     for (const e of this.enemies) this.drawEnemy(e);
+    if (this.mode === 'boss') this.bosses.draw(ctx, this.gameT);
     for (const b of this.bullets) {
       if (b.rail) {
         this.drawRailLaser(b.px, b.py, b.x, b.y, 1);

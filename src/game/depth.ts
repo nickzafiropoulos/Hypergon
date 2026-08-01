@@ -27,3 +27,17 @@ export function depthScale(depth: number, near = 1.2, far = 0.55): number {
   const d = depth < 0 ? 0 : depth > 1 ? 1 : depth;
   return near + (far - near) * d;
 }
+
+/** Coin/card tumble foreshortening — never fully vanishes. */
+export function flipScale(phase: number, min = 0.22): number {
+  return Math.max(min, Math.abs(Math.cos(phase)));
+}
+
+/** Mild vertical squash from travel speed / lateral lean (seekers). */
+export function bankScale(vx: number, vy: number, amount = 0.14): number {
+  const sp = Math.hypot(vx, vy);
+  if (sp < 1e-4) return 1;
+  const t = Math.min(1, sp / 280);
+  const hx = Math.abs(vx) / sp;
+  return Math.max(0.78, 1 - amount * t * (0.45 + hx * 0.55));
+}

@@ -2,12 +2,12 @@
  * Hypergon leaderboard Edge Function
  *
  * Actions (JSON body.action):
- *   start  → { token }
- *   beat   → { token, score, kills, sector, elapsed, autofire }
- *   submit → { token, name, score, kills, sector, elapsed, autofire }
+ *   start  → { mode?: 'survival'|'boss' } → { token }
+ *   beat   → survival: { token, score, kills, sector, elapsed, autofire }
+ *            boss:     { token, bosses_killed, elapsed, autofire, score? }
+ *   submit → + name; writes scores or boss_scores by session.mode
  *
- * Deploy: Supabase Dashboard → Edge Functions → create "leaderboard"
- * (or `supabase functions deploy leaderboard`)
+ * Deploy: supabase functions deploy leaderboard
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
@@ -17,22 +17,25 @@ const cors = {
     'authorization, x-client-info, apikey, content-type',
 };
 
-/** Generous but finite — blocks billion-point POSTs. */
 const MAX_SCORE = 50_000_000;
-/** Points/sec ceiling between heartbeats (very loose vs real play). */
 const MAX_SCORE_PER_SEC = 40_000;
 const MAX_KILLS_PER_SEC = 40;
+const MAX_BOSSES = 20;
 const SESSION_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 const BEAT_STALE_MS = 20_000;
 const MIN_BEATS_FOR_SUBMIT = 1;
+
+type Mode = 'survival' | 'boss';
 
 type Body = {
   action?: string;
   token?: string;
   name?: string;
+  mode?: string;
   score?: number;
   kills?: number;
   sector?: number;
+  bosses_killed?: number;
   elapsed?: number;
   autofire?: boolean;
 };
@@ -75,7 +78,6 @@ function clientIp(req: Request): string {
   return 'unknown';
 }
 
-/** Claim callsign or verify same-IP reuse. */
 async function assertCallsignOwner(
   sb: ReturnType<typeof adminClient>,
   name: string,
@@ -100,7 +102,6 @@ async function assertCallsignOwner(
       updated_at: new Date().toISOString(),
     });
     if (insErr) {
-      // Race: someone else claimed it
       if (insErr.code === '23505') {
         return { ok: false, reason: 'Callsign already taken.' };
       }
@@ -111,7 +112,6 @@ async function assertCallsignOwner(
   }
 
   if (!existing.owner_ip) {
-    // Legacy / unclaimed row — bind to this IP
     const { error: upErr } = await sb
       .from('callsigns')
       .update({ owner_ip: ip, name, updated_at: new Date().toISOString() })
@@ -128,7 +128,6 @@ async function assertCallsignOwner(
     return { ok: false, reason: 'Callsign already taken.' };
   }
 
-  // Same IP — refresh display casing if needed
   await sb
     .from('callsigns')
     .update({ name, updated_at: new Date().toISOString() })
@@ -136,16 +135,27 @@ async function assertCallsignOwner(
   return { ok: true };
 }
 
+function parseMode(raw: unknown): Mode {
+  return raw === 'boss' ? 'boss' : 'survival';
+}
+
 function nums(body: Body) {
   const score = Math.floor(Number(body.score) || 0);
   const kills = Math.floor(Number(body.kills) || 0);
   const sector = Math.floor(Number(body.sector) || 1);
+  const bosses = Math.floor(Number(body.bosses_killed) || 0);
   const elapsed = Math.max(0, Number(body.elapsed) || 0);
   const autofire = !!body.autofire;
-  return { score, kills, sector, elapsed, autofire };
+  return { score, kills, sector, bosses, elapsed, autofire };
 }
 
-function validateProgress(
+function sessionAgeOk(createdAt: string): string | null {
+  const age = Date.now() - new Date(createdAt).getTime();
+  if (age > SESSION_MAX_AGE_MS) return 'Session expired.';
+  return null;
+}
+
+function validateSurvival(
   prev: {
     last_score: number;
     last_kills: number;
@@ -165,12 +175,11 @@ function validateProgress(
   if (next.kills < prev.last_kills) return 'Kills went backwards.';
   if (next.elapsed + 0.05 < prev.last_elapsed) return 'Time went backwards.';
   if (!opts.allowEqual && next.score === prev.last_score && next.elapsed === prev.last_elapsed) {
-    return null; // idle beat ok
+    return null;
   }
 
   const dt = Math.max(0.001, next.elapsed - prev.last_elapsed);
-  const wallDt =
-    (Date.now() - new Date(prev.updated_at).getTime()) / 1000;
+  const wallDt = (Date.now() - new Date(prev.updated_at).getTime()) / 1000;
   const span = Math.max(dt, Math.min(wallDt, 30));
 
   const scoreJump = next.score - prev.last_score;
@@ -178,7 +187,6 @@ function validateProgress(
   if (scoreJump > MAX_SCORE_PER_SEC * span + 2000) return 'Score jump too large.';
   if (killJump > MAX_KILLS_PER_SEC * span + 8) return 'Kill jump too large.';
 
-  // Absolute ceiling vs play time (loose).
   if (next.score > next.elapsed * MAX_SCORE_PER_SEC + 8000) {
     return 'Score too high for play time.';
   }
@@ -188,10 +196,45 @@ function validateProgress(
     return 'Sector does not match play time.';
   }
 
-  const age = Date.now() - new Date(prev.created_at).getTime();
-  if (age > SESSION_MAX_AGE_MS) return 'Session expired.';
+  return sessionAgeOk(prev.created_at);
+}
 
-  return null;
+function validateBoss(
+  prev: {
+    last_bosses: number;
+    last_elapsed: number;
+    last_score: number;
+    updated_at: string;
+    created_at: string;
+  },
+  next: { bosses: number; elapsed: number; score: number },
+  opts: { allowEqual: boolean },
+): string | null {
+  if (next.bosses < 0 || next.bosses > MAX_BOSSES || next.elapsed < 0 || next.score < 0) {
+    return 'Invalid stats.';
+  }
+  if (next.score > MAX_SCORE) return 'Score rejected.';
+  if (next.bosses < (prev.last_bosses || 0)) return 'Bosses went backwards.';
+  if (next.elapsed + 0.05 < prev.last_elapsed) return 'Time went backwards.';
+  if (next.score < prev.last_score) return 'Score went backwards.';
+
+  if (
+    !opts.allowEqual &&
+    next.bosses === (prev.last_bosses || 0) &&
+    next.elapsed === prev.last_elapsed
+  ) {
+    return null;
+  }
+
+  const bossJump = next.bosses - (prev.last_bosses || 0);
+  if (bossJump > 2) return 'Boss jump too large.';
+
+  // Rough floor: you can't clear many bosses in a tiny time window.
+  if (next.bosses > 0 && next.elapsed < next.bosses * 3) {
+    return 'Time too short for bosses cleared.';
+  }
+
+  return sessionAgeOk(prev.created_at);
 }
 
 Deno.serve(async (req) => {
@@ -216,12 +259,15 @@ Deno.serve(async (req) => {
 
   try {
     if (action === 'start') {
+      const mode = parseMode(body.mode);
       const { data, error } = await sb
         .from('game_sessions')
         .insert({
+          mode,
           last_score: 0,
           last_kills: 0,
-          last_sector: 1,
+          last_sector: mode === 'boss' ? 1 : 1,
+          last_bosses: 0,
           last_elapsed: 0,
           beats: 0,
           autofire: false,
@@ -255,21 +301,39 @@ Deno.serve(async (req) => {
         return json({ ok: false, reason: 'Session already used' }, 400);
       }
 
-      const err = validateProgress(session, next, { allowEqual: true });
-      if (err) return json({ ok: false, reason: err }, 400);
+      const mode: Mode = session.mode === 'boss' ? 'boss' : 'survival';
+
+      if (mode === 'boss') {
+        const err = validateBoss(session, next, { allowEqual: true });
+        if (err) return json({ ok: false, reason: err }, 400);
+      } else {
+        const err = validateSurvival(session, next, { allowEqual: true });
+        if (err) return json({ ok: false, reason: err }, 400);
+      }
 
       if (action === 'beat') {
+        const patch =
+          mode === 'boss'
+            ? {
+                last_score: next.score,
+                last_bosses: next.bosses,
+                last_elapsed: next.elapsed,
+                autofire: next.autofire || session.autofire,
+                beats: (session.beats || 0) + 1,
+                updated_at: new Date().toISOString(),
+              }
+            : {
+                last_score: next.score,
+                last_kills: next.kills,
+                last_sector: next.sector,
+                last_elapsed: next.elapsed,
+                autofire: next.autofire || session.autofire,
+                beats: (session.beats || 0) + 1,
+                updated_at: new Date().toISOString(),
+              };
         const { error: upErr } = await sb
           .from('game_sessions')
-          .update({
-            last_score: next.score,
-            last_kills: next.kills,
-            last_sector: next.sector,
-            last_elapsed: next.elapsed,
-            autofire: next.autofire || session.autofire,
-            beats: (session.beats || 0) + 1,
-            updated_at: new Date().toISOString(),
-          })
+          .update(patch)
           .eq('id', token)
           .eq('finalized', false);
         if (upErr) {
@@ -282,7 +346,6 @@ Deno.serve(async (req) => {
       // submit
       const nameCheck = sanitizeName(String(body.name || ''));
       if (!nameCheck.ok) return json(nameCheck, 400);
-      if (next.score <= 0) return json({ ok: false, reason: 'Score must be positive.' }, 400);
       if ((session.beats || 0) < MIN_BEATS_FOR_SUBMIT) {
         return json({ ok: false, reason: 'Session too short to submit.' }, 400);
       }
@@ -292,31 +355,66 @@ Deno.serve(async (req) => {
         return json({ ok: false, reason: 'Session went stale - play a bit longer.' }, 400);
       }
 
-      // Final numbers must match last beat (client should beat once on game over).
-      if (
-        next.score !== session.last_score ||
-        next.kills !== session.last_kills ||
-        next.sector !== session.last_sector
-      ) {
-        // Allow one last progress step if within limits, then accept.
-        const stepErr = validateProgress(session, next, { allowEqual: false });
-        if (stepErr) return json({ ok: false, reason: stepErr }, 400);
+      if (mode === 'boss') {
+        if (next.bosses <= 0) {
+          return json({ ok: false, reason: 'Clear at least one boss to submit.' }, 400);
+        }
+        if (
+          next.bosses !== (session.last_bosses || 0) ||
+          Math.abs(next.elapsed - session.last_elapsed) > 0.05
+        ) {
+          const stepErr = validateBoss(session, next, { allowEqual: false });
+          if (stepErr) return json({ ok: false, reason: stepErr }, 400);
+        }
+      } else {
+        if (next.score <= 0) return json({ ok: false, reason: 'Score must be positive.' }, 400);
+        if (
+          next.score !== session.last_score ||
+          next.kills !== session.last_kills ||
+          next.sector !== session.last_sector
+        ) {
+          const stepErr = validateSurvival(session, next, { allowEqual: false });
+          if (stepErr) return json({ ok: false, reason: stepErr }, 400);
+        }
       }
 
       const ip = clientIp(req);
       const claim = await assertCallsignOwner(sb, nameCheck.name, ip);
       if (!claim.ok) return json(claim, 403);
 
-      const { error: scoreErr } = await sb.from('scores').insert({
-        name: nameCheck.name,
-        score: next.score,
-        sector: next.sector,
-        kills: next.kills,
-        autofire: next.autofire || session.autofire,
-      });
-      if (scoreErr) {
-        console.error(scoreErr);
-        return json({ ok: false, reason: 'Could not submit - try again.' }, 500);
+      if (mode === 'boss') {
+        const { error: scoreErr } = await sb.from('boss_scores').insert({
+          name: nameCheck.name,
+          bosses_killed: next.bosses,
+          elapsed: next.elapsed,
+          autofire: next.autofire || session.autofire,
+        });
+        if (scoreErr) {
+          console.error(scoreErr);
+          return json({
+            ok: false,
+            reason: scoreErr.message?.includes('permission') || scoreErr.code === '42P01'
+              ? 'Boss scores table missing - run migrate-boss-scores.sql.'
+              : 'Could not submit - try again.',
+          }, 500);
+        }
+      } else {
+        const { error: scoreErr } = await sb.from('scores').insert({
+          name: nameCheck.name,
+          score: next.score,
+          sector: next.sector,
+          kills: next.kills,
+          autofire: next.autofire || session.autofire,
+        });
+        if (scoreErr) {
+          console.error(scoreErr);
+          return json({
+            ok: false,
+            reason: scoreErr.message?.includes('permission')
+              ? 'Score table permissions missing - run migrate-scores-service-role.sql.'
+              : 'Could not submit - try again.',
+          }, 500);
+        }
       }
 
       await sb
@@ -326,6 +424,7 @@ Deno.serve(async (req) => {
           last_score: next.score,
           last_kills: next.kills,
           last_sector: next.sector,
+          last_bosses: next.bosses,
           last_elapsed: next.elapsed,
           autofire: next.autofire || session.autofire,
           updated_at: new Date().toISOString(),
