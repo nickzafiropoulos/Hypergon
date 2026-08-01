@@ -112,17 +112,17 @@ export class BossDirector {
 
   /** HP multiplier — index 0 → 1.0, last → ~2.55. */
   private difficultyScale(index = this.index): number {
-    return Math.pow(1.05, index);
+    return Math.pow(1.03, index);
   }
 
   /** Speed — index 0 → 1.0, last → ~1.7. */
   private speedScale(): number {
-    return Math.pow(1.028, this.index);
+    return Math.pow(1.035, this.index);
   }
 
-  /** Ability cooldown divisor — index 0 → 1.0, last → ~2.55. */
+  /** Ability cooldown divisor — strong baseline so early fights already pressure. */
   private aggroScale(): number {
-    return Math.pow(1.05, this.index);
+    return 1.4 * Math.pow(1.04, this.index);
   }
 
   /** Effective max HP for a roster slot (used to enforce a strict climb). */
@@ -135,11 +135,7 @@ export class BossDirector {
     const def = this.def();
     const x = host.W / 2;
     const y = host.H * 0.32;
-    // Always tougher than the previous fight — no dips in the ladder.
-    let hp = this.scaledHpFor(this.index);
-    if (this.index > 0) {
-      hp = Math.max(hp, Math.round(this.scaledHpFor(this.index - 1) * 1.14));
-    }
+    const hp = this.scaledHpFor(this.index);
     const spd = def.spd * this.speedScale();
     const armor =
       def.id === 'aegis_titan'
@@ -323,93 +319,113 @@ export class BossDirector {
     const d = len(host.player.x - b.x, host.player.y - b.y);
     b.cd -= dt;
     b.wob += dt;
+    b.flags.telegraph = Math.max(0, (b.flags.telegraph || 0) - dt);
     const aggro = this.aggroScale();
     const prog = this.progressT();
+    const phase = b.phase;
 
     switch (def.id) {
       case 'prism': {
-        b.sa += dt * (0.7 + prog * 0.35);
-        b.vx += tx * b.spd * 1.6 * dt;
-        b.vy += ty * b.spd * 1.6 * dt;
-        // Plate-slam dash
-        if ((b.flags.atkCd || 0) <= 0) {
-          b.flags.atkCd = 2.8 / aggro;
-          b.vx += tx * (420 + prog * 180);
-          b.vy += ty * (420 + prog * 180);
-          ringFx(host.rings, b.x, b.y, b.col, b.r * 0.4, b.r * 1.6, 0.28);
-          host.gridImpulse(b.x, b.y, 8, b.r * 2);
+        b.sa += dt * (1.35 + prog * 0.55 + phase * 0.25);
+        b.vx += tx * b.spd * 2.35 * dt;
+        b.vy += ty * b.spd * 2.35 * dt;
+        if (this.fireDash(b, tx, ty, 0.38, (1.7 - phase * 0.2) / aggro, 560 + prog * 220)) {
+          this.blast(host, b, 150 + prog * 40, 420, { hurtR: 70, impulse: 12 });
+          this.seedMines(b, 3 + phase, b.r + 70, '#a98bff');
         }
-        this.dampen(b, 0.92);
+        this.dampen(b, 0.9);
         this.integrate(b, dt);
         break;
       }
       case 'crown': {
-        b.vx += Math.cos(b.wob * 0.7) * (30 + prog * 18) * dt;
-        b.vy += Math.sin(b.wob * 0.55) * (24 + prog * 14) * dt;
-        this.dampen(b, 0.96);
-        this.integrate(b, dt);
-        break;
-      }
-      case 'void_anchor': {
-        // Slow drift — giant footprint, not a chase
-        b.vx += Math.cos(b.wob * 0.4) * 22 * dt + tx * b.spd * 0.55 * dt;
-        b.vy += Math.sin(b.wob * 0.35) * 18 * dt + ty * b.spd * 0.55 * dt;
-        b.grow = Math.min(55 + prog * 20, b.grow + dt * (2.2 + prog));
-        b.r = def.r + b.grow * 0.4;
+        b.vx += Math.cos(b.wob * 1.1) * (55 + prog * 30) * dt + tx * b.spd * 1.4 * dt;
+        b.vy += Math.sin(b.wob * 0.9) * (48 + prog * 24) * dt + ty * b.spd * 1.4 * dt;
         if ((b.flags.atkCd || 0) <= 0) {
-          b.flags.atkCd = 3.2 / aggro;
-          ringFx(host.rings, b.x, b.y, b.col, b.r * 0.5, b.r * 2.2, 0.45);
-          host.gridImpulse(b.x, b.y, 18, b.r * 3.5);
-          host.shake = Math.max(host.shake, 12);
-          if (d < b.r + 140) {
-            host.player.vx -= tx * 380;
-            host.player.vy -= ty * 380;
-          }
+          b.flags.atkCd = 2.0 / aggro;
+          this.lunge(b, tx, ty, 480 + prog * 160);
+          this.blast(host, b, 130, 360, { hurtR: 55, impulse: 10 });
+          this.sprayAdds(host, b, 'seeker', 1 + (phase > 0 ? 1 : 0));
         }
-        this.dampen(b, 0.97);
-        this.integrate(b, dt);
-        break;
-      }
-      case 'hexstorm': {
-        b.vx += tx * b.spd * 2.2 * dt;
-        b.vy += ty * b.spd * 2.2 * dt;
-        this.dampen(b, 0.9);
-        this.integrate(b, dt);
         if (b.cd <= 0) {
-          b.cd = (1.05 - b.phase * 0.15) / aggro;
-          const n = 1 + (b.phase > 0 ? 1 : 0) + (prog > 0.5 ? 1 : 0);
-          for (let i = 0; i < n; i++) {
-            const a = rnd(TAU);
-            const dist = 55 + rnd(70);
-            this.env.spawnMine(b.x + Math.cos(a) * dist, b.y + Math.sin(a) * dist);
-          }
-        }
-        break;
-      }
-      case 'aegis_titan': {
-        b.sa += dt * (1.1 + b.phase * 0.35 + prog * 0.25);
-        b.vx += tx * b.spd * 1.6 * dt;
-        b.vy += ty * b.spd * 1.6 * dt;
-        // Shield charge
-        if ((b.flags.atkCd || 0) <= 0) {
-          b.flags.atkCd = 2.4 / aggro;
-          const a = b.sa;
-          b.vx += Math.cos(a) * (520 + prog * 200);
-          b.vy += Math.sin(a) * (520 + prog * 200);
-          ringFx(host.rings, b.x, b.y, '#ffb02e', b.r * 0.3, b.r * 1.8, 0.3);
+          b.cd = 1.4 / aggro;
+          this.seedMines(b, 2 + phase, 90 + prog * 20, '#ffb02e');
         }
         this.dampen(b, 0.93);
         this.integrate(b, dt);
         break;
       }
+      case 'void_anchor': {
+        b.vx += Math.cos(b.wob * 0.55) * 34 * dt + tx * b.spd * 1.15 * dt;
+        b.vy += Math.sin(b.wob * 0.45) * 28 * dt + ty * b.spd * 1.15 * dt;
+        b.grow = Math.min(70 + prog * 25, b.grow + dt * (3.4 + prog * 1.2 + phase));
+        b.r = def.r + b.grow * 0.42;
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 2.1 / aggro;
+          this.blast(host, b, b.r + 160, 640 + prog * 120, {
+            hurtR: b.r + 55,
+            impulse: 22,
+            ringScale: 1.1,
+          });
+          this.seedMines(b, 4 + phase, b.r + 40, '#ff2d55');
+        }
+        this.dampen(b, 0.96);
+        this.integrate(b, dt);
+        break;
+      }
+      case 'hexstorm': {
+        b.vx += tx * b.spd * 3.1 * dt;
+        b.vy += ty * b.spd * 3.1 * dt;
+        this.dampen(b, 0.88);
+        this.integrate(b, dt);
+        if (b.cd <= 0) {
+          b.cd = (0.55 - phase * 0.08) / aggro;
+          const n = 3 + phase + (prog > 0.4 ? 1 : 0);
+          for (let i = 0; i < n; i++) {
+            const a = rnd(TAU);
+            this.env.spawnMine(b.x + Math.cos(a) * (40 + rnd(90)), b.y + Math.sin(a) * (40 + rnd(90)));
+          }
+        }
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 2.2 / aggro;
+          this.lunge(b, tx, ty, 520);
+          this.blast(host, b, 170, 500, { hurtR: 75, impulse: 14 });
+          this.seedMines(b, 6, b.r + 55);
+        }
+        break;
+      }
+      case 'aegis_titan': {
+        b.sa += dt * (1.7 + phase * 0.45 + prog * 0.35);
+        b.vx += tx * b.spd * 2.2 * dt;
+        b.vy += ty * b.spd * 2.2 * dt;
+        if (this.fireDash(b, Math.cos(b.sa), Math.sin(b.sa), 0.32, (1.55 - phase * 0.18) / aggro, 640 + prog * 240)) {
+          this.blast(host, b, 160, 480, { hurtR: 65, impulse: 14 });
+          this.seedMines(b, 4, b.r + 60, '#ff7a3d');
+        }
+        if (b.cd <= 0) {
+          b.cd = 1.8 / aggro;
+          this.sprayAdds(host, b, 'shard', 2 + phase);
+        }
+        this.dampen(b, 0.91);
+        this.integrate(b, dt);
+        break;
+      }
       case 'serpent_regent': {
-        b.wob += dt * (2.6 + prog * 0.8);
+        b.wob += dt * (3.4 + prog * 1.1);
         const perpx = -ty;
         const perpy = tx;
-        const s = Math.sin(b.wob) * (0.95 + prog * 0.25);
-        b.vx += (tx + perpx * s) * b.spd * 2.55 * dt;
-        b.vy += (ty + perpy * s) * b.spd * 2.55 * dt;
-        this.dampen(b, 0.9);
+        const s = Math.sin(b.wob) * (1.15 + prog * 0.3);
+        b.vx += (tx + perpx * s) * b.spd * 3.2 * dt;
+        b.vy += (ty + perpy * s) * b.spd * 3.2 * dt;
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 1.5 / aggro;
+          this.lunge(b, tx, ty, 620 + prog * 180);
+          this.sprayAdds(host, b, 'shard', 3 + phase);
+        }
+        if (b.cd <= 0) {
+          b.cd = 0.85 / aggro;
+          this.seedMines(b, 2, 50, '#4dffc3');
+        }
+        this.dampen(b, 0.88);
         this.integrate(b, dt);
         let px = b.x;
         let py = b.y;
@@ -428,85 +444,116 @@ export class BossDirector {
         break;
       }
       case 'mirror_core': {
-        b.vx += tx * b.spd * 2 * dt;
-        b.vy += ty * b.spd * 2 * dt;
-        this.dampen(b, 0.91);
+        b.vx += tx * b.spd * 2.7 * dt;
+        b.vy += ty * b.spd * 2.7 * dt;
+        if (this.fireDash(b, tx, ty, 0.34, 1.65 / aggro, 580 + prog * 160)) {
+          this.blast(host, b, 140, 400, { hurtR: 60 });
+          this.sprayAdds(host, b, 'seeker', 2);
+        }
+        if (b.cd <= 0) {
+          b.cd = 1.1 / aggro;
+          this.seedMines(b, 3 + phase, 100, '#63f7ff');
+        }
+        this.dampen(b, 0.9);
         this.integrate(b, dt);
-        const orbit = 120 + prog * 30;
+        const orbit = 110 + prog * 35;
         for (let i = 0; i < b.segs.length; i++) {
-          const a = b.wob * (0.8 + prog * 0.3) + (i / 3) * TAU;
+          const a = b.wob * (1.2 + prog * 0.4) + (i / 3) * TAU;
           b.segs[i]!.x = b.x + Math.cos(a) * orbit;
-          b.segs[i]!.y = b.y + Math.sin(a) * (orbit * 0.7);
+          b.segs[i]!.y = b.y + Math.sin(a) * (orbit * 0.75);
         }
         break;
       }
       case 'phase_lattice': {
         b.flags.phaseT = (b.flags.phaseT || 0) + dt;
-        const cycle = host.buffs.timewarp > 0 ? 3.6 : 2.4 - prog * 0.35;
+        const cycle = host.buffs.timewarp > 0 ? 3.2 : 2.05 - prog * 0.28;
         const solidWindow =
-          (host.buffs.timewarp > 0 ? 2.2 : 1.15) * (1 - prog * 0.22);
-        const t = b.flags.phaseT % Math.max(1.4, cycle);
-        b.solid = t < Math.max(0.55, solidWindow);
-        b.vx += tx * b.spd * 1.7 * dt;
-        b.vy += ty * b.spd * 1.7 * dt;
-        this.dampen(b, 0.93);
+          (host.buffs.timewarp > 0 ? 1.85 : 0.95) * (1 - prog * 0.18) * (1 - phase * 0.08);
+        const t = b.flags.phaseT % Math.max(1.3, cycle);
+        b.solid = t < Math.max(0.45, solidWindow);
+        b.vx += tx * b.spd * (b.solid ? 2.4 : 1.5) * dt;
+        b.vy += ty * b.spd * (b.solid ? 2.4 : 1.5) * dt;
+        if (b.solid && (b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 1.4 / aggro;
+          this.lunge(b, tx, ty, 540);
+          this.blast(host, b, 150, 440, { hurtR: 68 });
+        }
+        if (!b.solid && b.cd <= 0) {
+          b.cd = 0.7 / aggro;
+          this.seedMines(b, 3 + phase, b.r + 45, '#a98bff');
+          this.sprayAdds(host, b, 'shard', 1 + phase);
+        }
+        this.dampen(b, 0.91);
         this.integrate(b, dt);
         break;
       }
       case 'starforge': {
-        b.vx += Math.cos(b.wob) * 20 * dt;
-        b.vy += Math.sin(b.wob * 0.7) * 16 * dt;
-        this.dampen(b, 0.97);
+        b.vx += Math.cos(b.wob * 1.2) * 36 * dt + tx * b.spd * 1.6 * dt;
+        b.vy += Math.sin(b.wob * 0.95) * 30 * dt + ty * b.spd * 1.6 * dt;
+        this.dampen(b, 0.94);
         this.integrate(b, dt);
         const vents = this.env.countAlive('crystal', 'vent');
-        const rate = ((vents > 0 ? 0.85 : 1.8) - b.phase * 0.12) / aggro;
+        const rate = ((vents > 0 ? 0.48 : 0.95) - phase * 0.08) / aggro;
         if (b.cd <= 0) {
-          b.cd = Math.max(0.35, rate);
-          const burst = vents > 0 ? 1 + (prog > 0.4 ? 1 : 0) : 1;
-          for (let i = 0; i < burst && host.enemies.length < 38; i++) {
-            const a = rnd(TAU);
-            host.spawnEnemy(
-              'seeker',
-              b.x + Math.cos(a) * (b.r + 30),
-              b.y + Math.sin(a) * (b.r + 30),
-            );
-          }
+          b.cd = Math.max(0.28, rate);
+          const burst = vents > 0 ? 2 + phase + (prog > 0.35 ? 1 : 0) : 1 + phase;
+          this.sprayAdds(host, b, pick(['seeker', 'shard']), burst);
+        }
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 2.0 / aggro;
+          this.blast(host, b, 180 + prog * 40, 520, { hurtR: 80, impulse: 16 });
+          this.seedMines(b, 5, b.r + 50, '#ff3fa4');
         }
         break;
       }
       case 'crystal_nexus': {
-        b.vx += tx * b.spd * 1.5 * dt;
-        b.vy += ty * b.spd * 1.5 * dt;
-        this.dampen(b, 0.94);
+        const heals = this.env.countAlive('crystal');
+        b.vx += tx * b.spd * (heals > 0 ? 2.0 : 2.8) * dt;
+        b.vy += ty * b.spd * (heals > 0 ? 2.0 : 2.8) * dt;
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = (heals > 0 ? 1.8 : 1.25) / aggro;
+          this.lunge(b, tx, ty, 500 + prog * 140);
+          this.blast(host, b, 145, 420, { hurtR: 62 });
+        }
+        if (b.cd <= 0) {
+          b.cd = (heals > 0 ? 0.9 : 1.4) / aggro;
+          this.sprayAdds(host, b, 'seeker', heals > 0 ? 2 + phase : 1);
+          this.seedMines(b, 2 + phase, 85, '#63f7ff');
+        }
+        this.dampen(b, 0.9);
         this.integrate(b, dt);
         break;
       }
       case 'pulse_maw': {
         b.flags.mawT = (b.flags.mawT || 0) + dt;
-        const cycle = 3.0 - prog * 0.25;
+        const cycle = 2.55 - prog * 0.2;
         const t = b.flags.mawT % cycle;
-        b.open = t > 1.45 && t < 2.45;
-        // Slow orbit when closed; lunge when open
+        const wasOpen = b.open;
+        b.open = t > 1.15 && t < 2.05;
+        if (b.open && !wasOpen) {
+          this.blast(host, b, 200, 560, { hurtR: 90, impulse: 18 });
+          this.sprayAdds(host, b, 'shard', 4 + phase);
+        }
+        if (!b.open && wasOpen) {
+          this.seedMines(b, 5 + phase, b.r + 30, '#ff2d55');
+        }
         if (b.open) {
-          b.vx += tx * b.spd * 2.4 * dt;
-          b.vy += ty * b.spd * 2.4 * dt;
+          b.vx += tx * b.spd * 3.0 * dt;
+          b.vy += ty * b.spd * 3.0 * dt;
           if (b.cd <= 0) {
-            b.cd = 0.32 / aggro;
-            if (host.enemies.length < 32) {
-              host.spawnEnemy('shard', b.x + tx * (b.r + 10), b.y + ty * (b.r + 10));
-            }
-            if ((b.flags.atkCd || 0) <= 0) {
-              b.flags.atkCd = 1.6 / aggro;
-              b.vx += tx * 480;
-              b.vy += ty * 480;
-              ringFx(host.rings, b.x, b.y, b.col, b.r * 0.4, b.r * 1.5, 0.28);
-            }
+            b.cd = 0.22 / aggro;
+            this.sprayAdds(host, b, 'shard', 1);
+          }
+          if ((b.flags.atkCd || 0) <= 0) {
+            b.flags.atkCd = 1.1 / aggro;
+            this.lunge(b, tx, ty, 620);
+            this.blast(host, b, 160, 480, { hurtR: 70 });
           }
         } else {
-          b.vx += tx * b.spd * 0.9 * dt;
-          b.vy += ty * b.spd * 0.9 * dt;
+          b.vx += tx * b.spd * 1.35 * dt;
+          b.vy += ty * b.spd * 1.35 * dt;
         }
-        this.dampen(b, 0.94);
+        this.dampen(b, 0.92);
         this.integrate(b, dt);
         break;
       }
@@ -514,20 +561,24 @@ export class BossDirector {
         b.flags.shockT = (b.flags.shockT || 0) - dt;
         b.flags.recovery = Math.max(0, (b.flags.recovery || 0) - dt);
         if (b.flags.shockT <= 0) {
-          b.flags.shockT = (3.2 - b.phase * 0.45) / aggro;
-          b.flags.recovery = Math.max(0.7, 1.15 - prog * 0.25);
-          const knockR = 240 + prog * 100;
-          host.shake = Math.max(host.shake, 22 + prog * 8);
-          host.gridImpulse(b.x, b.y, 44, Math.max(host.W, host.H));
-          ringFx(host.rings, b.x, b.y, b.col, 20, Math.max(host.W, host.H) * (0.45 + prog * 0.1), 0.55);
-          if (d < knockR) {
-            host.player.vx -= tx * (560 + prog * 180);
-            host.player.vy -= ty * (560 + prog * 180);
-          }
+          b.flags.shockT = (2.15 - phase * 0.28) / aggro;
+          b.flags.recovery = Math.max(0.85, 1.25 - prog * 0.2);
+          const knockR = 280 + prog * 120;
+          this.blast(host, b, knockR, 720 + prog * 200, {
+            hurtR: 130 + prog * 40,
+            impulse: 48,
+            ringScale: 1.3,
+          });
+          this.seedMines(b, 4 + phase, 120, '#ffb02e');
         }
-        b.vx += tx * b.spd * 2 * dt;
-        b.vy += ty * b.spd * 2 * dt;
-        this.dampen(b, 0.9);
+        const chase = (b.flags.recovery || 0) > 0 ? 1.4 : 2.6;
+        b.vx += tx * b.spd * chase * dt;
+        b.vy += ty * b.spd * chase * dt;
+        if (b.cd <= 0 && (b.flags.recovery || 0) <= 0) {
+          b.cd = 1.0 / aggro;
+          this.sprayAdds(host, b, 'seeker', 2);
+        }
+        this.dampen(b, 0.88);
         this.integrate(b, dt);
         break;
       }
@@ -535,179 +586,267 @@ export class BossDirector {
         const twin = b.segs[0];
         if (twin) {
           const [t2x, t2y] = norm(host.player.x - twin.x, host.player.y - twin.y);
-          twin.x += t2x * b.spd * 1.6 * dt + Math.cos(b.wob) * 40 * dt;
-          twin.y += t2y * b.spd * 1.6 * dt + Math.sin(b.wob) * 40 * dt;
+          twin.x += t2x * b.spd * 2.3 * dt + Math.cos(b.wob * 1.4) * 70 * dt;
+          twin.y += t2y * b.spd * 2.3 * dt + Math.sin(b.wob * 1.4) * 70 * dt;
           twin.x = clamp(twin.x, b.r + 8, host.W - b.r - 8);
           twin.y = clamp(twin.y, b.r + 8, host.H - b.r - 8);
           b.flags.lastHit0 = (b.flags.lastHit0 || 0) + dt;
           b.flags.lastHit1 = (b.flags.lastHit1 || 0) + dt;
-          const regen = 14 + prog * 10;
-          if (b.flags.lastHit0 > 2.5 && b.flags.lastHit1 < 1) b.hp = Math.min(b.maxhp, b.hp + regen * dt);
-          if (b.flags.lastHit1 > 2.5 && b.flags.lastHit0 < 1) b.hp = Math.min(b.maxhp, b.hp + regen * dt);
+          const regen = 22 + prog * 14;
+          if (b.flags.lastHit0 > 1.8 && b.flags.lastHit1 < 0.8) b.hp = Math.min(b.maxhp, b.hp + regen * dt);
+          if (b.flags.lastHit1 > 1.8 && b.flags.lastHit0 < 0.8) b.hp = Math.min(b.maxhp, b.hp + regen * dt);
         }
-        b.vx += tx * b.spd * 1.6 * dt;
-        b.vy += ty * b.spd * 1.6 * dt;
-        this.dampen(b, 0.91);
+        b.vx += tx * b.spd * 2.3 * dt;
+        b.vy += ty * b.spd * 2.3 * dt;
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 1.6 / aggro;
+          this.lunge(b, tx, ty, 520);
+          this.blast(host, b, 130, 380, { hurtR: 55 });
+          if (twin) {
+            const [t2x, t2y] = norm(host.player.x - twin.x, host.player.y - twin.y);
+            twin.x += t2x * 40;
+            twin.y += t2y * 40;
+          }
+          this.seedMines(b, 3, 95, '#b8ff3d');
+        }
+        this.dampen(b, 0.89);
         this.integrate(b, dt);
         break;
       }
       case 'lodestone': {
-        // Heavy drift + periodic well pulse
-        b.vx += tx * b.spd * 1.1 * dt + Math.cos(b.wob * 0.5) * 14 * dt;
-        b.vy += ty * b.spd * 1.1 * dt + Math.sin(b.wob * 0.4) * 12 * dt;
+        b.vx += tx * b.spd * 1.7 * dt + Math.cos(b.wob * 0.7) * 28 * dt;
+        b.vy += ty * b.spd * 1.7 * dt + Math.sin(b.wob * 0.55) * 24 * dt;
         if ((b.flags.atkCd || 0) <= 0) {
-          b.flags.atkCd = 2.6 / aggro;
-          const strength = (host.buffs.magnet > 0 ? -520 : 620) * (1 + prog * 0.35);
-          const reach = 360 + b.r * 0.4;
+          b.flags.atkCd = 1.7 / aggro;
+          const strength = (host.buffs.magnet > 0 ? -780 : 860) * (1 + prog * 0.4);
+          const reach = 400 + b.r * 0.45;
           if (d < reach) {
-            host.player.vx += tx * strength * (1 - d / reach) * 0.08;
-            host.player.vy += ty * strength * (1 - d / reach) * 0.08;
+            host.player.vx += tx * strength * (1 - d / reach) * 0.12;
+            host.player.vy += ty * strength * (1 - d / reach) * 0.12;
           }
-          ringFx(host.rings, b.x, b.y, b.col, b.r * 0.5, reach * 0.7, 0.4);
-          host.gridImpulse(b.x, b.y, 16, reach);
+          this.blast(host, b, reach * 0.65, 400, { hurtR: 95, impulse: 18 });
+          this.seedMines(b, 5 + phase, b.r + 55, '#b8ff3d');
         }
-        this.dampen(b, 0.96);
+        if (b.cd <= 0) {
+          b.cd = 1.3 / aggro;
+          this.sprayAdds(host, b, 'seeker', 2);
+        }
+        this.dampen(b, 0.94);
         this.integrate(b, dt);
         break;
       }
       case 'arc_throne': {
         b.flags.opened = Math.max(0, (b.flags.opened || 0) - dt);
-        b.vx += Math.cos(b.wob * 0.5) * 18 * dt;
-        b.vy += Math.sin(b.wob * 0.4) * 14 * dt;
-        this.dampen(b, 0.97);
+        const open = (b.flags.opened || 0) > 0;
+        b.vx += Math.cos(b.wob * 0.7) * 28 * dt + tx * b.spd * (open ? 2.2 : 0.9) * dt;
+        b.vy += Math.sin(b.wob * 0.55) * 22 * dt + ty * b.spd * (open ? 2.2 : 0.9) * dt;
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = (open ? 1.3 : 2.2) / aggro;
+          this.blast(host, b, open ? 170 : 140, open ? 520 : 360, { hurtR: open ? 75 : 50 });
+          this.sprayAdds(host, b, pick(['shard', 'seeker']), open ? 3 : 2);
+        }
+        if (b.cd <= 0) {
+          b.cd = 1.5 / aggro;
+          this.seedMines(b, 3 + phase, 130, '#a98bff');
+        }
+        this.dampen(b, 0.94);
         this.integrate(b, dt);
         break;
       }
       case 'railbait': {
-        b.flags.telegraph = Math.max(0, (b.flags.telegraph || 0) - dt);
         if ((b.flags.telegraph || 0) <= 0 && b.cd <= 0) {
-          b.flags.dashAng = Math.atan2(ty, tx);
-          b.flags.telegraph = 0.55 + prog * 0.2;
-          b.cd = (1.75 - b.phase * 0.25) / aggro;
+          b.flags.dashAng = Math.atan2(ty, tx) + rnd(0.35, -0.35);
+          b.flags.telegraph = 0.42 + prog * 0.12;
+          b.cd = (1.15 - phase * 0.18) / aggro;
           b.flags.pendingDash = 1;
           b.flags.gotCrit = 0;
         }
         if ((b.flags.pendingDash || 0) > 0 && (b.flags.telegraph || 0) <= 0) {
           const a = b.flags.dashAng || 0;
-          const dash = (b.enraged ? 980 : 820) * (1 + prog * 0.15);
+          const dash = (b.enraged ? 1100 : 920) * (1 + prog * 0.2);
           b.vx = Math.cos(a) * dash;
           b.vy = Math.sin(a) * dash;
           b.flags.pendingDash = 0;
+          this.blast(host, b, 120, 360, { hurtR: 50, impulse: 10 });
+          this.seedMines(b, 3, 60, '#9ee9ff');
         }
         if ((b.flags.wasTele || 0) > 0 && (b.flags.telegraph || 0) <= 0 && (b.flags.gotCrit || 0) <= 0) {
           b.enraged = true;
         }
         b.flags.wasTele = (b.flags.telegraph || 0) > 0 ? 1 : 0;
-        this.dampen(b, 0.97);
+        // Constant weave between dashes
+        b.vx += tx * b.spd * 0.8 * dt + Math.cos(b.wob * 3) * 90 * dt;
+        b.vy += ty * b.spd * 0.8 * dt + Math.sin(b.wob * 3) * 90 * dt;
+        this.dampen(b, 0.95);
         this.integrate(b, dt);
         break;
       }
       case 'nest_queen': {
         const nests = this.env.countAlive('nest');
         b.flags.nesting = nests > 0 ? 1 : 0;
-        if (nests > 0) {
-          b.vx += tx * b.spd * 1.1 * dt;
-          b.vy += ty * b.spd * 1.1 * dt;
-        } else {
-          b.vx += tx * b.spd * 2.5 * dt;
-          b.vy += ty * b.spd * 2.5 * dt;
-          // Respawn pressure when nests are down
-          if (b.cd <= 0) {
-            b.cd = 5.5 / aggro;
-            if (host.enemies.length < 28) {
-              const a = rnd(TAU);
-              host.spawnEnemy('seeker', b.x + Math.cos(a) * 80, b.y + Math.sin(a) * 80);
-              host.spawnEnemy('shard', b.x + Math.cos(a + 1) * 70, b.y + Math.sin(a + 1) * 70);
-            }
-          }
+        b.vx += tx * b.spd * (nests > 0 ? 1.7 : 3.2) * dt;
+        b.vy += ty * b.spd * (nests > 0 ? 1.7 : 3.2) * dt;
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 1.7 / aggro;
+          this.lunge(b, tx, ty, 480);
+          this.blast(host, b, 150, 400, { hurtR: 65 });
+          this.sprayAdds(host, b, 'seeker', nests > 0 ? 2 : 3 + phase);
         }
-        this.dampen(b, 0.92);
+        if (b.cd <= 0) {
+          b.cd = (nests > 0 ? 2.2 : 1.2) / aggro;
+          this.sprayAdds(host, b, 'shard', 2 + phase);
+          this.seedMines(b, 3, 80, '#ffb02e');
+        }
+        this.dampen(b, 0.9);
         this.integrate(b, dt);
         break;
       }
       case 'stasis_warden': {
         if (b.cd <= 0) {
-          b.cd = (2.6 - b.phase * 0.3) / aggro;
-          this.env.spawnZone(host.player.x, host.player.y, 95 + prog * 20, 5.5, 0.32, '#a98bff');
-          if (prog > 0.45) {
-            const a = rnd(TAU);
-            this.env.spawnZone(
-              host.player.x + Math.cos(a) * 90,
-              host.player.y + Math.sin(a) * 90,
-              70,
-              4,
-              0.4,
-              '#a98bff',
-            );
+          b.cd = (1.55 - phase * 0.2) / aggro;
+          this.env.spawnZone(host.player.x, host.player.y, 105 + prog * 25, 4.2, 0.28, '#a98bff');
+          const a = rnd(TAU);
+          this.env.spawnZone(
+            host.player.x + Math.cos(a) * 100,
+            host.player.y + Math.sin(a) * 100,
+            78,
+            3.6,
+            0.35,
+            '#a98bff',
+          );
+          if (prog > 0.35 || phase > 0) {
+            this.env.spawnZone(b.x, b.y, 90, 3.2, 0.4, '#a98bff');
           }
         }
         b.flags.inZone = this.env.bossInSlowZone(b) ? 1 : 0;
-        const spdMul = b.flags.inZone ? 0.35 : 1;
-        b.vx += tx * b.spd * 2.2 * spdMul * dt;
-        b.vy += ty * b.spd * 2.2 * spdMul * dt;
-        this.dampen(b, 0.9);
+        const spdMul = b.flags.inZone ? 0.4 : 1;
+        b.vx += tx * b.spd * 2.9 * spdMul * dt;
+        b.vy += ty * b.spd * 2.9 * spdMul * dt;
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 1.8 / aggro;
+          this.lunge(b, tx, ty, 560);
+          this.blast(host, b, 155, 460, { hurtR: 68 });
+          this.seedMines(b, 4, 95, '#a98bff');
+        }
+        this.dampen(b, 0.88);
         this.integrate(b, dt);
         break;
       }
       case 'bulwark_colossus': {
-        b.sa += dt * (0.7 + prog * 0.2);
-        // Slow sweep — giant
-        b.vx += Math.cos(b.wob * 0.35) * 28 * dt + tx * b.spd * 0.85 * dt;
-        b.vy += Math.sin(b.wob * 0.3) * 22 * dt + ty * b.spd * 0.85 * dt;
-        this.dampen(b, 0.95);
+        b.sa += dt * (1.1 + prog * 0.3);
+        b.vx += Math.cos(b.wob * 0.5) * 42 * dt + tx * b.spd * 1.45 * dt;
+        b.vy += Math.sin(b.wob * 0.42) * 34 * dt + ty * b.spd * 1.45 * dt;
+        this.dampen(b, 0.93);
         this.integrate(b, dt);
         if ((b.flags.atkCd || 0) <= 0) {
-          b.flags.atkCd = 3.4 / aggro;
-          host.shake = Math.max(host.shake, 18);
-          host.gridImpulse(b.x, b.y, 28, b.r * 3.5);
-          ringFx(host.rings, b.x, b.y, b.col, b.r * 0.4, b.r * 2.4, 0.4);
-          if (d < b.r + 100) {
-            host.player.vx -= tx * 640;
-            host.player.vy -= ty * 640;
-          }
+          b.flags.atkCd = 2.1 / aggro;
+          this.blast(host, b, b.r + 130, 780, { hurtR: b.r + 45, impulse: 32, ringScale: 1.15 });
+          this.seedMines(b, 5 + phase, b.r + 35, '#ff7a3d');
         }
-        if (b.cd <= 0 && host.enemies.length < 14) {
-          b.cd = 4.0 / aggro;
-          const a = rnd(TAU);
-          host.spawnEnemy('bulwark', b.x + Math.cos(a) * (b.r + 40), b.y + Math.sin(a) * (b.r + 40));
+        if (b.cd <= 0) {
+          b.cd = 2.4 / aggro;
+          this.sprayAdds(host, b, 'bulwark', 1);
+          this.sprayAdds(host, b, 'seeker', 2);
         }
         break;
       }
       case 'singularity_apex': {
         b.flags.phaseT = (b.flags.phaseT || 0) + dt;
-        if (b.phase >= 2) {
-          const cycle = 2.6 - prog * 0.15;
-          b.solid = b.flags.phaseT % cycle < 1.25;
+        if (phase >= 2) {
+          const cycle = 2.2 - prog * 0.12;
+          b.solid = b.flags.phaseT % cycle < 1.05;
         } else b.solid = true;
-        b.grow = Math.min(70, b.grow + dt * (1.6 + prog * 0.4));
-        b.r = def.r + b.grow * 0.28;
-        // Slow orbit + occasional mine ring
-        b.vx += Math.cos(b.wob * 0.45) * 20 * dt + tx * b.spd * 0.7 * dt;
-        b.vy += Math.sin(b.wob * 0.4) * 16 * dt + ty * b.spd * 0.7 * dt;
-        if (b.cd <= 0) {
-          b.cd = (2.0 - b.phase * 0.25) / aggro;
-          const mines = 2 + b.phase + (prog > 0.7 ? 1 : 0);
-          for (let i = 0; i < mines; i++) {
-            const a = (i / mines) * TAU + b.ang;
-            this.env.spawnMine(
-              b.x + Math.cos(a) * (b.r + 50),
-              b.y + Math.sin(a) * (b.r + 50),
-              '#ff2d55',
-            );
-          }
-          if (host.enemies.length < 22) {
-            const a = rnd(TAU);
-            host.spawnEnemy('seeker', b.x + Math.cos(a) * (b.r + 20), b.y + Math.sin(a) * (b.r + 20));
-          }
+        b.grow = Math.min(85, b.grow + dt * (2.4 + prog * 0.55));
+        b.r = def.r + b.grow * 0.3;
+        b.vx += Math.cos(b.wob * 0.6) * 34 * dt + tx * b.spd * 1.25 * dt;
+        b.vy += Math.sin(b.wob * 0.5) * 28 * dt + ty * b.spd * 1.25 * dt;
+        if ((b.flags.atkCd || 0) <= 0) {
+          b.flags.atkCd = 1.9 / aggro;
+          this.blast(host, b, b.r + 180, 700, { hurtR: b.r + 50, impulse: 26 });
+          this.seedMines(b, 6 + phase, b.r + 55, '#ff2d55');
         }
-        this.dampen(b, 0.96);
+        if (b.cd <= 0) {
+          b.cd = (1.15 - phase * 0.15) / aggro;
+          this.seedMines(b, 3 + phase, b.r + 40, '#ff2d55');
+          this.sprayAdds(host, b, 'seeker', 2 + (phase > 0 ? 1 : 0));
+        }
+        this.dampen(b, 0.94);
         this.integrate(b, dt);
         break;
       }
     }
   }
 
+  /** Radial blast — knockback + optional inner hurt radius. */
+  private blast(
+    host: BossHost,
+    b: BossRuntime,
+    knockR: number,
+    force: number,
+    opts: { hurtR?: number; impulse?: number; ringScale?: number } = {},
+  ): void {
+    const [tx, ty] = norm(host.player.x - b.x, host.player.y - b.y);
+    const d = len(host.player.x - b.x, host.player.y - b.y);
+    host.shake = Math.max(host.shake, 11 + force * 0.015);
+    host.gridImpulse(b.x, b.y, opts.impulse ?? 14, knockR * 1.15);
+    ringFx(host.rings, b.x, b.y, b.col, b.r * 0.3, knockR * (opts.ringScale ?? 0.9), 0.38);
+    if (d < knockR) {
+      const falloff = 1 - d / knockR;
+      host.player.vx -= tx * force * falloff;
+      host.player.vy -= ty * force * falloff;
+    }
+    if (opts.hurtR && d < opts.hurtR) host.hurtPlayer();
+  }
+
+  private lunge(b: BossRuntime, tx: number, ty: number, power: number): void {
+    b.vx += tx * power;
+    b.vy += ty * power;
+  }
+
+  private seedMines(b: BossRuntime, n: number, dist: number, col?: string): void {
+    for (let i = 0; i < n; i++) {
+      const a = (i / Math.max(1, n)) * TAU + b.ang + rnd(0.4, -0.2);
+      this.env.spawnMine(b.x + Math.cos(a) * dist, b.y + Math.sin(a) * dist, col);
+    }
+  }
+
+  private sprayAdds(host: BossHost, b: BossRuntime, type: EnemyType, n: number): void {
+    for (let i = 0; i < n && host.enemies.length < 40; i++) {
+      const a = rnd(TAU);
+      host.spawnEnemy(type, b.x + Math.cos(a) * (b.r + 18 + rnd(24)), b.y + Math.sin(a) * (b.r + 18 + rnd(24)));
+    }
+  }
+
+  /**
+   * Telegraph then dash. Returns true on the frame the dash fires.
+   * Uses flags.telegraph / pendingDash / dashAng / atkCd.
+   */
+  private fireDash(
+    b: BossRuntime,
+    tx: number,
+    ty: number,
+    teleDur: number,
+    cooldown: number,
+    power: number,
+  ): boolean {
+    if ((b.flags.pendingDash || 0) > 0 && (b.flags.telegraph || 0) <= 0) {
+      const a = b.flags.dashAng || Math.atan2(ty, tx);
+      b.vx += Math.cos(a) * power;
+      b.vy += Math.sin(a) * power;
+      b.flags.pendingDash = 0;
+      return true;
+    }
+    if ((b.flags.atkCd || 0) <= 0 && (b.flags.telegraph || 0) <= 0 && (b.flags.pendingDash || 0) <= 0) {
+      b.flags.dashAng = Math.atan2(ty, tx);
+      b.flags.telegraph = teleDur;
+      b.flags.pendingDash = 1;
+      b.flags.atkCd = cooldown;
+    }
+    return false;
+  }
+
   private dampen(b: BossRuntime, f: number): void {
+
     b.vx *= f;
     b.vy *= f;
   }
@@ -741,7 +880,7 @@ export class BossDirector {
       }
       return false;
     }
-    // Late bosses shrug chip fire — crits / mines / bombs stay full strength.
+    // Mild late-roster chip resist — crits / mines / bombs stay full strength.
     let dealt = result.applied;
     if (
       result.message !== 'CRITICAL HIT' &&
@@ -749,7 +888,7 @@ export class BossDirector {
       ctx.source !== 'mine' &&
       ctx.source !== 'env'
     ) {
-      dealt *= 1 / (1 + this.progressT() * 1.1);
+      dealt *= 1 / (1 + this.progressT() * 0.55);
     }
     b.hp -= dealt;
     b.flash = 0.14;
@@ -1095,17 +1234,17 @@ export class BossDirector {
       }
     }
 
-    // Railbait telegraph
-    if (def.id === 'railbait' && (b.flags.telegraph || 0) > 0) {
+    // Dash telegraph (any boss using flags.telegraph / dashAng)
+    if ((b.flags.telegraph || 0) > 0) {
       const a = b.flags.dashAng || 0;
       ctx.save();
-      ctx.strokeStyle = '#9ee9ff';
-      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = def.id === 'railbait' ? '#9ee9ff' : b.col;
+      ctx.globalAlpha = 0.4 + Math.sin(t * 28) * 0.12;
       ctx.setLineDash([10, 8]);
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.x + Math.cos(a) * 500, b.y + Math.sin(a) * 500);
+      ctx.lineTo(b.x + Math.cos(a) * 520, b.y + Math.sin(a) * 520);
       ctx.stroke();
       ctx.restore();
     }
