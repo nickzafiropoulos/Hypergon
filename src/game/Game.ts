@@ -1087,8 +1087,16 @@ export class Game {
     this.grid.impulse(this.player.x, this.player.y, -0.1 - this.player.thrust * 0.14, 78);
     if (this.player.invuln > 0) this.player.invuln -= dt;
 
-    const [ax, ay] = norm(st.ax || 1, st.ay || 0);
-    this.player.ang = Math.atan2(ay, ax);
+    // Don't use `ax || 1` — a pure vertical aim has ax === 0 and would lock right.
+    let ax: number;
+    let ay: number;
+    if (Math.hypot(st.ax, st.ay) > 1e-6) {
+      [ax, ay] = norm(st.ax, st.ay);
+      this.player.ang = Math.atan2(ay, ax);
+    } else {
+      ax = Math.cos(this.player.ang);
+      ay = Math.sin(this.player.ang);
+    }
     this.fireCd -= dt;
     this.beam = null;
     if (st.firing) this.shoot(ax, ay, dt);

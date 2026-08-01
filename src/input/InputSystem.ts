@@ -130,7 +130,11 @@ export class InputSystem {
     addEventListener('blur', () => {
       for (const k in this.held) this.held[k] = false;
       this.pointer.down = false;
+      this.clearTouchSticks();
       if (this.cbs.isPlaying()) this.cbs.onPause();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.clearTouchSticks();
     });
 
     // Coarse pointer / touch detection for UI
@@ -144,7 +148,8 @@ export class InputSystem {
   /** Virtual stick assignment from touch UI layer. */
   beginStick(kind: 'move' | 'aim', id: number, x: number, y: number): void {
     const st = kind === 'move' ? this.touchMove : this.touchAim;
-    if (st.id !== null) return;
+    // Always take the new touch — lostpointercapture can leave a stale id that
+    // would otherwise permanently lock the stick (and ship aim) in one direction.
     st.id = id;
     st.ox = st.x = x;
     st.oy = st.y = y;
@@ -161,7 +166,20 @@ export class InputSystem {
 
   endStick(id: number): void {
     for (const st of [this.touchMove, this.touchAim]) {
-      if (st.id === id) st.id = null;
+      if (st.id === id) {
+        st.id = null;
+        st.x = st.ox;
+        st.y = st.oy;
+      }
+    }
+  }
+
+  /** Clear both virtual sticks (blur / page hide). */
+  clearTouchSticks(): void {
+    for (const st of [this.touchMove, this.touchAim]) {
+      st.id = null;
+      st.x = st.ox;
+      st.y = st.oy;
     }
   }
 
@@ -233,18 +251,22 @@ export class InputSystem {
         ay += dy;
         firing = true;
       } else {
+        // Stick held but near center — keep last facing and keep firing.
         ax = Math.cos(player.ang);
         ay = Math.sin(player.ang);
         firing = true;
       }
     }
 
-    // Mouse aim / fire (desktop) — only when not using touch aim
-    if (this.touchAim.id === null && !ax && !ay) {
+    // Mouse aim / fire (desktop only). On touch UI, never fall back to a stale
+    // pointer at (0,0) — that pins the ship toward the top-left corner.
+    if (this.touchAim.id === null && !ax && !ay && !this.touchUiVisible) {
       const player = this.cbs.getPlayerPos();
       ax = this.pointer.x - player.x;
       ay = this.pointer.y - player.y;
       if (this.pointer.down || this.autofire) firing = true;
+    } else if (this.touchAim.id === null && this.touchUiVisible && this.autofire) {
+      firing = true;
     }
 
     const ml = Math.hypot(mx, my);

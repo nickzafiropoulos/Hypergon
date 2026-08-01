@@ -89,9 +89,15 @@ export class TouchControls {
     const end = (e: PointerEvent) => {
       this.input.endStick(e.pointerId);
       resetKnob();
+      try {
+        if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
   }
 
   private placeKnob(
