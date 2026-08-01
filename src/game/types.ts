@@ -1,7 +1,7 @@
 import type { EnemyType, PowerKey, WeaponKey } from './catalogue';
 
 export type GameState = 'menu' | 'play' | 'paused' | 'over' | 'win';
-export type GameMode = 'survival' | 'boss';
+export type GameMode = 'survival' | 'boss' | 'adventure';
 
 export type EnvKind =
   | 'crystal'
@@ -39,6 +39,10 @@ export type EnvProp = {
   hurtBoss?: boolean;
   dead: boolean;
   flash: number;
+  /** Spawn intro remaining (seconds). */
+  birth?: number;
+  /** Spawn intro duration for ease. */
+  birthMax?: number;
   /** Extra scratch for nests / timers. */
   cd?: number;
   tag?: string;
@@ -99,6 +103,8 @@ export type BossRuntime = {
   phase: number;
   dead: boolean;
   birth: number;
+  /** Duration of spawn intro (for scale/fade ease). */
+  birthMax: number;
   flash: number;
   wob: number;
   sa: number;
@@ -170,6 +176,8 @@ export type Bullet = {
   src?: DamageSource;
   /** Times bounced off reflective pillars / plates. */
   ricochet?: number;
+  /** True after bouncing off a bulwark shield arc — next kill is a CRITICAL. */
+  shieldBounce?: boolean;
 };
 
 export type EBullet = {

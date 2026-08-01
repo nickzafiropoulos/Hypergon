@@ -22,3 +22,14 @@ export function angDiff(a: number, b: number): number {
   if (d < 0) d += TAU;
   return d - Math.PI;
 }
+
+/** Spawn-in ease: scale + opacity from 0→1 over a birth timer. */
+export function spawnVisual(birth: number, birthMax: number): { alpha: number; scale: number } {
+  if (birthMax <= 0 || birth <= 0) return { alpha: 1, scale: 1 };
+  const t = clamp(1 - birth / birthMax, 0, 1);
+  const e = 1 - Math.pow(1 - t, 3);
+  return {
+    alpha: e,
+    scale: 0.18 + 0.82 * e,
+  };
+}

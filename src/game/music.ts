@@ -1,7 +1,7 @@
 import { getAudioContext, isMuted } from './audio';
 import type { BossId } from './types';
 
-export type MusicTheme = 'menu' | 'survival' | 'boss' | `boss:${BossId}`;
+export type MusicTheme = 'menu' | 'survival' | 'adventure' | 'boss' | `boss:${BossId}`;
 
 type Step = number | null; // MIDI note, or null = rest
 
@@ -19,6 +19,14 @@ type Track = {
   pad?: boolean;
   /** Moody resonant synth bass with filter envelope. */
   bass?: boolean;
+  /** Hard hammered piano — sharp attack, bright partials, long ring. */
+  piano?: boolean;
+  /** Cinematic brass/impact sting — explosive open, long decay. */
+  sting?: boolean;
+  /** Send into hall reverb. */
+  reverb?: boolean;
+  /** Send into slap / feedback echo. */
+  echo?: boolean;
 };
 
 type ThemeDef = {
@@ -71,6 +79,7 @@ const MENU: ThemeDef = {
       gate: 0.95,
       pad: true,
       detune: 8,
+      reverb: true,
       pattern: [
         57, null, null, null, 60, null, null, null, 57, null, null, null, 64, null, null, null, 57,
         null, null, null, 65, null, null, null, 64, null, null, null, 55, null, null, null,
@@ -81,6 +90,8 @@ const MENU: ThemeDef = {
       vol: 0.014,
       gate: 0.5,
       detune: 6,
+      echo: true,
+      reverb: true,
       pattern: [
         69, null, 72, null, 76, null, 72, null, 69, null, 72, null, 76, null, 79, null, 69, null, 72,
         null, 77, null, 76, null, 74, null, 72, null, 69, null, 67, null,
@@ -132,6 +143,7 @@ const SURVIVAL: ThemeDef = {
       vol: 0.01,
       gate: 0.95,
       pad: true,
+      reverb: true,
       pattern: [
         60, null, null, null, 63, null, null, null, 60, null, null, null, 67, null, null, null, 58,
         null, null, null, 63, null, null, null, 60, null, null, null, 65, null, null, null,
@@ -142,6 +154,8 @@ const SURVIVAL: ThemeDef = {
       vol: 0.012,
       gate: 0.35,
       detune: 10,
+      echo: true,
+      reverb: true,
       pattern: [
         72, null, 76, 79, null, 76, 72, null, 71, null, 74, 76, null, 74, 71, null, 69, null, 72, 76,
         null, 72, 69, null, 67, 69, 71, 72, null, 74, 76, null,
@@ -150,6 +164,119 @@ const SURVIVAL: ThemeDef = {
   ],
   drums: 'k.h.s.h.k.h.s.ho.k.h.s.h.k.h.s.h.',
   drumsB: '..t.....t.c...t...t.....t...c.t.',
+};
+
+/**
+ * Adventure crawl — intense cinematic charge.
+ * Drawn bass, hard pianos, driving pulse, big wet stings.
+ */
+const ADVENTURE: ThemeDef = {
+  bpm: 118,
+  div: 4,
+  tracks: [
+    // Deep held bass drones.
+    {
+      wave: 'sawtooth',
+      vol: 0.018,
+      gate: 6.5,
+      bass: true,
+      sub: true,
+      pattern: [
+        26, null, null, null, null, null, null, null, 26, null, null, null, null, null, null, null,
+        29, null, null, null, null, null, null, null, 29, null, null, null, 26, null, null, null,
+        24, null, null, null, null, null, null, null, 24, null, null, null, null, null, null, null,
+        31, null, null, null, null, null, 29, null, 26, null, null, null, 24, null, null, null,
+      ],
+    },
+    // Driving bass pulse under the drones.
+    {
+      wave: 'sawtooth',
+      vol: 0.014,
+      gate: 1.1,
+      bass: true,
+      pattern: [
+        38, null, 38, null, 38, null, 45, null, 38, null, 38, null, 43, null, 45, null, 41, null, 41,
+        null, 41, null, 48, null, 38, null, 40, null, 41, null, 43, null, 36, null, 36, null, 36, null,
+        43, null, 36, null, 38, null, 40, null, 41, null, 43, null, 43, null, 45, null, 41, null, 38,
+        null, 36, null, 38, null, 36, null,
+      ],
+    },
+    // Dark pad wash — wet hall.
+    {
+      wave: 'sawtooth',
+      vol: 0.011,
+      gate: 3.2,
+      pad: true,
+      detune: 12,
+      reverb: true,
+      pattern: [
+        50, null, null, null, null, null, null, null, 53, null, null, null, null, null, null, null,
+        50, null, null, null, null, null, null, null, 55, null, null, null, 57, null, null, null, 48,
+        null, null, null, null, null, null, null, 53, null, null, null, null, null, null, null, 50,
+        null, null, null, 55, null, null, null, 53, null, 50, null, 48, null, null, null,
+      ],
+    },
+    // Aggressive mid ostinato — urgency.
+    {
+      wave: 'square',
+      vol: 0.015,
+      gate: 0.55,
+      detune: 8,
+      echo: true,
+      pattern: [
+        50, 50, null, 50, 53, null, 55, null, 50, 50, null, 50, 57, null, 55, null, 48, 48, null, 48,
+        53, null, 55, null, 50, null, 53, null, 55, 57, null, 55, 50, 50, null, 50, 53, null, 57, null,
+        50, 50, null, 53, 55, null, 57, null, 48, null, 50, null, 53, 55, null, 53, 50, null, 48, null,
+        45, 48, null, 50,
+      ],
+    },
+    // Hard piano — low octaves, denser hits.
+    {
+      wave: 'triangle',
+      vol: 0.03,
+      gate: 2.0,
+      piano: true,
+      reverb: true,
+      pattern: [
+        38, null, null, null, 50, null, null, null, 38, null, null, 50, null, null, 53, null, 41, null,
+        null, null, 53, null, 38, null, 41, null, null, 53, null, null, 50, null, 36, null, null, null,
+        48, null, null, null, 36, null, 48, null, 36, null, null, 50, 43, null, null, null, 50, null,
+        null, null, 38, null, 50, null, 43, null, 38, null,
+      ],
+    },
+    // Hard piano — high hammers, more frequent.
+    {
+      wave: 'triangle',
+      vol: 0.024,
+      gate: 1.5,
+      piano: true,
+      reverb: true,
+      echo: true,
+      pattern: [
+        62, null, null, 65, null, null, 62, null, 67, null, null, null, 69, null, 67, null, 62, null,
+        65, null, 67, null, null, 69, null, null, 62, null, 67, null, 65, null, 60, null, null, 65,
+        null, null, 60, null, 67, null, null, null, 65, null, 62, null, 62, null, 67, null, null, 69,
+        null, 67, 62, null, 60, null, 62, null, 65, null,
+      ],
+    },
+    // Big cinematic stings — wet and loud.
+    {
+      wave: 'sawtooth',
+      vol: 0.022,
+      gate: 3.8,
+      sting: true,
+      reverb: true,
+      echo: true,
+      pattern: [
+        57, null, null, null, null, null, null, null, null, null, null, null, 64, null, null, null,
+        null, null, null, null, 57, null, null, null, 64, null, null, null, null, null, 69, null, 55,
+        null, null, null, null, null, null, null, null, null, null, null, 62, null, null, null, null,
+        null, null, null, 57, null, null, null, 62, null, null, null, 57, null, 64, null,
+      ],
+    },
+  ],
+  drums: 'k.h.k.s.k.h.s.h.k.h.k.s.k.s.h.s.k.h.k.s.k.h.s.h.k.s.k.s.k.c.s.c.',
+  drumsB: 'c...t...c...t.c.c...t...c.t.c...c...t...c...t.c.c...t.c.t.c.t.c.',
 };
 
 const SCALES = {
@@ -382,6 +509,7 @@ function menace(spec: MenaceSpec): ThemeDef {
         gate: 0.98,
         pad: true,
         detune: 14,
+        reverb: true,
         pattern: patFrom(sc, root, padDeg, 1),
       },
       {
@@ -389,6 +517,8 @@ function menace(spec: MenaceSpec): ThemeDef {
         vol: 0.014,
         gate: 0.38,
         detune: 7,
+        echo: true,
+        reverb: true,
         pattern: patFrom(sc, root, leadDeg, 1),
       },
     ],
@@ -605,6 +735,7 @@ const BOSS_THEMES = Object.fromEntries(
 function resolveTheme(name: MusicTheme): ThemeDef {
   if (name === 'menu') return MENU;
   if (name === 'survival') return SURVIVAL;
+  if (name === 'adventure') return ADVENTURE;
   if (name === 'boss') return BOSS_FALLBACK;
   if (name.startsWith('boss:')) {
     const id = name.slice(5) as BossId;
@@ -622,6 +753,9 @@ let step = 0;
 let nextNoteTime = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let master: GainNode | null = null;
+let echoSend: GainNode | null = null;
+let reverbSend: GainNode | null = null;
+let fxBuiltFor: AudioContext | null = null;
 let ducking = false;
 let started = false;
 
@@ -630,8 +764,78 @@ function masterGain(ctx: AudioContext): GainNode {
     master = ctx.createGain();
     master.gain.value = 0;
     master.connect(ctx.destination);
+    fxBuiltFor = null;
   }
   return master;
+}
+
+/** Impulse for a cheap algorithmic hall. */
+function makeImpulse(ctx: AudioContext, seconds: number, decay: number): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const len = Math.max(1, (rate * seconds) | 0);
+  const buf = ctx.createBuffer(2, len, rate);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+  }
+  return buf;
+}
+
+/** Shared echo + reverb sends into the music master. */
+function ensureFx(ctx: AudioContext): void {
+  if (fxBuiltFor === ctx && echoSend && reverbSend) return;
+  const m = masterGain(ctx);
+
+  echoSend = ctx.createGain();
+  echoSend.gain.value = 0.55;
+  const delay = ctx.createDelay(1.2);
+  delay.delayTime.value = 0.3;
+  const fb = ctx.createGain();
+  fb.gain.value = 0.36;
+  const echoLp = ctx.createBiquadFilter();
+  echoLp.type = 'lowpass';
+  echoLp.frequency.value = 2400;
+  const echoWet = ctx.createGain();
+  echoWet.gain.value = 0.48;
+  echoSend.connect(delay);
+  delay.connect(fb).connect(echoLp).connect(delay);
+  delay.connect(echoWet).connect(m);
+
+  reverbSend = ctx.createGain();
+  reverbSend.gain.value = 0.7;
+  const conv = ctx.createConvolver();
+  conv.buffer = makeImpulse(ctx, 2.4, 2.6);
+  const revLp = ctx.createBiquadFilter();
+  revLp.type = 'lowpass';
+  revLp.frequency.value = 3800;
+  const revWet = ctx.createGain();
+  revWet.gain.value = 0.38;
+  reverbSend.connect(conv).connect(revLp).connect(revWet).connect(m);
+
+  fxBuiltFor = ctx;
+}
+
+type VoiceOpts = {
+  detune?: number;
+  sub?: boolean;
+  pad?: boolean;
+  bass?: boolean;
+  piano?: boolean;
+  sting?: boolean;
+  reverb?: boolean;
+  echo?: boolean;
+};
+
+function wireOut(ctx: AudioContext, node: AudioNode, opts: VoiceOpts): void {
+  const dest = masterGain(ctx);
+  node.connect(dest);
+  if (opts.reverb || opts.echo) {
+    ensureFx(ctx);
+    if (opts.reverb && reverbSend) node.connect(reverbSend);
+    if (opts.echo && echoSend) node.connect(echoSend);
+  }
 }
 
 function targetGain(): number {
@@ -654,10 +858,9 @@ function voice(
   dur: number,
   type: OscillatorType,
   vol: number,
-  opts: { detune?: number; sub?: boolean; pad?: boolean; bass?: boolean } = {},
+  opts: VoiceOpts = {},
 ): void {
   try {
-    const dest = masterGain(ctx);
     const release = Math.max(0.05, dur);
 
     if (opts.bass) {
@@ -684,7 +887,8 @@ function voice(
       g.gain.exponentialRampToValueAtTime(0.0001, when + release);
       o1.connect(filter);
       o2.connect(filter);
-      filter.connect(g).connect(dest);
+      filter.connect(g);
+      wireOut(ctx, g, opts);
       o1.start(when);
       o2.start(when);
       o1.stop(when + release + 0.05);
@@ -697,10 +901,83 @@ function voice(
         sg.gain.setValueAtTime(0.0001, when);
         sg.gain.exponentialRampToValueAtTime(vol * 0.28, when + 0.02);
         sg.gain.exponentialRampToValueAtTime(0.0001, when + release);
-        sub.connect(sg).connect(dest);
+        sub.connect(sg);
+        wireOut(ctx, sg, opts);
         sub.start(when);
         sub.stop(when + release + 0.05);
       }
+      return;
+    }
+
+    if (opts.piano) {
+      // Hard piano: hammer transient + bright partials, long ringing decay.
+      const ring = Math.max(release, 1.1);
+      const partials: [number, number, OscillatorType][] = [
+        [1, 1, 'triangle'],
+        [2, 0.42, 'sine'],
+        [3, 0.18, 'triangle'],
+        [4, 0.08, 'sine'],
+      ];
+      for (const [mult, amp, wave] of partials) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = wave;
+        o.frequency.setValueAtTime(Math.max(20, freq * mult), when);
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(vol * amp, when + 0.004);
+        g.gain.exponentialRampToValueAtTime(vol * amp * 0.35, when + 0.09);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + ring);
+        o.connect(g);
+        wireOut(ctx, g, opts);
+        o.start(when);
+        o.stop(when + ring + 0.05);
+      }
+      // Felt hammer noise
+      noiseHit(ctx, when, 0.035, 'bandpass', Math.min(4200, freq * 18), vol * 0.55, 4);
+      return;
+    }
+
+    if (opts.sting) {
+      // Big cinematic sting: brass burst + filter open, long epic tail.
+      const ring = Math.max(release, 1.6);
+      const o1 = ctx.createOscillator();
+      const o2 = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+      o1.type = 'sawtooth';
+      o2.type = 'square';
+      o1.frequency.setValueAtTime(Math.max(40, freq), when);
+      o2.frequency.setValueAtTime(Math.max(40, freq), when);
+      o2.detune.setValueAtTime(6, when);
+      filter.type = 'lowpass';
+      filter.Q.setValueAtTime(2.4, when);
+      filter.frequency.setValueAtTime(800, when);
+      filter.frequency.exponentialRampToValueAtTime(4800, when + 0.03);
+      filter.frequency.exponentialRampToValueAtTime(900, when + ring * 0.7);
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.exponentialRampToValueAtTime(vol, when + 0.008);
+      g.gain.setValueAtTime(vol * 0.55, when + 0.2);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + ring);
+      o1.connect(filter);
+      o2.connect(filter);
+      filter.connect(g);
+      wireOut(ctx, g, opts);
+      o1.start(when);
+      o2.start(when);
+      o1.stop(when + ring + 0.05);
+      o2.stop(when + ring + 0.05);
+      const sub = ctx.createOscillator();
+      const sg = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(Math.max(28, freq * 0.5), when);
+      sg.gain.setValueAtTime(0.0001, when);
+      sg.gain.exponentialRampToValueAtTime(vol * 0.4, when + 0.01);
+      sg.gain.exponentialRampToValueAtTime(0.0001, when + ring);
+      sub.connect(sg);
+      wireOut(ctx, sg, opts);
+      sub.start(when);
+      sub.stop(when + ring + 0.05);
+      noiseHit(ctx, when, 0.12, 'highpass', 3500, vol * 0.7, 2.2);
       return;
     }
 
@@ -723,7 +1000,8 @@ function voice(
       g.gain.setValueAtTime(0.0001, when);
       g.gain.exponentialRampToValueAtTime(v, when + attack);
       g.gain.exponentialRampToValueAtTime(0.0001, when + release);
-      node.connect(g).connect(dest);
+      node.connect(g);
+      wireOut(ctx, g, opts);
       o.start(when);
       o.stop(when + release + 0.04);
     };
@@ -846,6 +1124,10 @@ function scheduleStep(ctx: AudioContext, def: ThemeDef, s: number, when: number)
       sub: track.sub,
       pad: track.pad,
       bass: track.bass,
+      piano: track.piano,
+      sting: track.sting,
+      reverb: track.reverb,
+      echo: track.echo,
     });
   }
   scheduleDrums(ctx, def.drums, s, when);

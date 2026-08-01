@@ -432,6 +432,8 @@ export const BOSS_ROSTER: BossDef[] = [
 ];
 
 export const BOSS_COUNT = BOSS_ROSTER.length;
+/** Adventure mode uses the first 10 bosses from the roster. */
+export const ADVENTURE_BOSS_COUNT = 10;
 
 export function bossDef(id: BossId): BossDef {
   const d = BOSS_ROSTER.find((b) => b.id === id);

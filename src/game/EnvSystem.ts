@@ -1,7 +1,9 @@
-import { len, norm, rnd, TAU } from './maths';
+import { len, norm, rnd, TAU, spawnVisual } from './maths';
 import type { BossDef, EnvSpawn } from './bosses';
 import type { EnvProp, Particle, Player, Ring } from './types';
 import { ringFx, spark } from './particles';
+
+const INTRO = 0.48;
 
 export type EnvHooks = {
   W: number;
@@ -16,6 +18,14 @@ export class EnvSystem {
 
   clear(): void {
     this.props.length = 0;
+  }
+
+  /** Advance spawn intros while the boss itself is still birthing. */
+  tickIntro(dt: number): void {
+    for (const p of this.props) {
+      if (p.dead || !(p.birth && p.birth > 0)) continue;
+      p.birth = Math.max(0, p.birth - dt);
+    }
   }
 
   spawnFromDef(def: BossDef, hooks: EnvHooks, bossX: number, bossY: number): void {
@@ -49,6 +59,8 @@ export class EnvSystem {
         orbitAng: (i / Math.max(1, pts.length)) * TAU,
         dead: false,
         flash: 0,
+        birth: INTRO + i * 0.03,
+        birthMax: INTRO + i * 0.03,
         cd: rnd(1.4, 0.6),
         tag: spec.tag,
       };
@@ -150,6 +162,11 @@ export class EnvSystem {
       }
       p.flash = Math.max(0, p.flash - dt);
       p.ang += dt * 0.8;
+      if (p.birth && p.birth > 0) {
+        p.birth = Math.max(0, p.birth - dt);
+        // Skip contact / AI until fully materialized
+        continue;
+      }
 
       if (p.kind === 'satellite' && boss) {
         p.orbitAng = (p.orbitAng || 0) + (p.orbitSpd || 1) * dt;
@@ -211,7 +228,7 @@ export class EnvSystem {
   applyForces(dt: number, player: Player, reverse = false): number {
     let slow = 1;
     for (const p of this.props) {
-      if (p.dead) continue;
+      if (p.dead || (p.birth ?? 0) > 0) continue;
       if (p.kind === 'well') {
         const dx = p.x - player.x;
         const dy = p.y - player.y;
@@ -263,6 +280,7 @@ export class EnvSystem {
   ): { hit: EnvProp; reflective: boolean } | null {
     for (const p of this.props) {
       if (p.dead) continue;
+      if ((p.birth ?? 0) > 0) continue;
       if (p.kind !== 'pillar' && p.kind !== 'crystal' && p.kind !== 'nest' && p.kind !== 'satellite')
         continue;
       if ((x - p.x) ** 2 + (y - p.y) ** 2 <= (r + p.r) ** 2) {
@@ -287,6 +305,8 @@ export class EnvSystem {
       hurtBoss: true,
       dead: false,
       flash: 0,
+      birth: 0.28,
+      birthMax: 0.28,
     });
   }
 
@@ -305,17 +325,23 @@ export class EnvSystem {
       hurtPlayer: false,
       dead: false,
       flash: 0,
+      birth: 0.28,
+      birthMax: 0.28,
     });
   }
 
-  draw(ctx: CanvasRenderingContext2D, t: number): void {
+  draw(ctx: CanvasRenderingContext2D, t: number, bossScale = 1): void {
     for (const p of this.props) {
       if (p.dead) continue;
+      const intro = spawnVisual(p.birth ?? 0, p.birthMax ?? 0);
+      // Match boss scale slightly so helpers arrive with the fight
+      const scale = intro.scale * (0.92 + 0.08 * bossScale);
       ctx.save();
       ctx.translate(p.x, p.y);
+      ctx.scale(scale, scale);
       ctx.rotate(p.ang);
       const flash = p.flash > 0;
-      ctx.globalAlpha = flash ? 1 : 0.9;
+      ctx.globalAlpha = (flash ? 1 : 0.9) * intro.alpha;
       ctx.strokeStyle = flash ? '#fff' : p.col;
       ctx.fillStyle = flash ? 'rgba(255,255,255,0.25)' : p.col + '22';
       ctx.lineWidth = 2.2;

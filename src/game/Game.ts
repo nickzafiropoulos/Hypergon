@@ -20,13 +20,15 @@ import { playMusic, setMusicDucked, setMusicMuted, unlockMusic } from './music';
 import { WarpGrid } from './grid';
 import { depthScale, flipScale } from './depth';
 import { BossDirector } from './BossDirector';
+import { AdventureDirector } from './AdventureDirector';
 import {
   beatGameSession,
   clearSessionToken,
   startGameSession,
+  type GameModeLb,
 } from '../leaderboard/supabase';
 import { angDiff, clamp, len, lerp, norm, pick, rnd, TAU } from './maths';
-import { pushParticle, ringFx, spark } from './particles';
+import { pushParticle, ringFx, spark, explode } from './particles';
 import type {
   Beam,
   Bolt,
@@ -86,6 +88,7 @@ export class Game {
   state: GameState = 'menu';
   mode: GameMode = 'survival';
   bosses = new BossDirector();
+  adventure = new AdventureDirector();
   enemies: Enemy[] = [];
   bullets: Bullet[] = [];
   ebullets: EBullet[] = [];
@@ -279,6 +282,7 @@ export class Game {
     this.gemHintShown = false;
     this.gemHint = null;
     this.bosses.reset();
+    this.adventure.reset();
     for (const k of Object.keys(this.buffs) as (keyof typeof this.buffs)[]) {
       this.buffs[k] = 0;
     }
@@ -301,13 +305,79 @@ export class Game {
     if (this.mode === 'boss') {
       // Per-boss beds start inside BossDirector.spawnFight.
       this.bosses.begin(this.bossHost());
+    } else if (this.mode === 'adventure') {
+      this.adventure.begin(this.adventureHost());
     } else {
       playMusic('survival');
       this.toast('SECTOR 01', this.sectorName(1), 1500, '#63f7ff');
     }
-    void startGameSession(this.mode).then((ok) => {
-      if (ok) void this.pulseSession();
-    });
+    if (this.mode !== 'adventure') {
+      void startGameSession(this.mode as GameModeLb).then((ok) => {
+        if (ok) void this.pulseSession();
+      });
+    }
+  }
+
+  /** Boss arena combat is active (full boss mode or Adventure lock-in). */
+  bossCombat(): boolean {
+    return this.mode === 'boss' || (this.mode === 'adventure' && this.adventure.isBossPhase());
+  }
+
+  private adventureHost() {
+    const g = this;
+    return {
+      get W() {
+        return g.W;
+      },
+      get H() {
+        return g.H;
+      },
+      get parts() {
+        return g.parts;
+      },
+      get rings() {
+        return g.rings;
+      },
+      get enemies() {
+        return g.enemies;
+      },
+      get player() {
+        return g.player;
+      },
+      get buffs() {
+        return g.buffs;
+      },
+      get elapsed() {
+        return g.elapsed;
+      },
+      set elapsed(v: number) {
+        g.elapsed = v;
+      },
+      get sector() {
+        return g.sector;
+      },
+      set sector(v: number) {
+        g.sector = v;
+      },
+      toast: g.toast.bind(g),
+      spawnEnemy: (type: EnemyType, x: number, y: number) => g.spawnEnemy(type, x, y),
+      hurtPlayer: () => g.hurtPlayer(),
+      bosses: g.bosses,
+      bossHost: () => g.bossHost(),
+      onVictory: () => g.victory(),
+      purgeEnemies: () => g.purgeEnemiesNoScore(),
+    };
+  }
+
+  /** Adventure arena lock — explode swarm with FX, no score/gems. */
+  purgeEnemiesNoScore(): void {
+    let any = false;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      this.killEnemy(e, true, false);
+      any = true;
+    }
+    if (any) SFX.big();
   }
 
   private bossHost() {
@@ -378,6 +448,9 @@ export class Game {
       gridImpulse: (x: number, y: number, force: number, rad: number) =>
         g.grid.impulse(x, y, force, rad),
       onBossVictory: () => g.victory(),
+      onFightCleared: () => {
+        if (g.mode === 'adventure') g.adventure.onFightCleared(g.adventureHost());
+      },
       hurtPlayer: () => g.hurtPlayer(),
       spawnBossGems: (x: number, y: number, n: number) => {
         for (let i = 0; i < n; i++) {
@@ -405,11 +478,12 @@ export class Game {
 
   private sessionStats() {
     return {
-      mode: this.mode,
+      mode: (this.mode === 'adventure' ? 'survival' : this.mode) as GameModeLb,
       score: this.score,
       kills: this.kills,
       sector: this.sector,
-      bosses_killed: this.mode === 'boss' ? this.bosses.cleared : 0,
+      bosses_killed:
+        this.mode === 'boss' || this.mode === 'adventure' ? this.bosses.cleared : 0,
       elapsed: this.elapsed,
       autofire: this.usedAutofire,
     };
@@ -456,7 +530,7 @@ export class Game {
   gameOver(): void {
     this.state = 'over';
     playMusic('menu');
-    void this.pulseSession();
+    if (this.mode !== 'adventure') void this.pulseSession();
     if (this.score > this.best) {
       this.best = this.score;
       try {
@@ -473,7 +547,10 @@ export class Game {
           best: this.best,
           kills: this.kills,
           elapsed: this.elapsed,
-          sector: this.mode === 'boss' ? this.bosses.cleared : this.sector,
+          sector:
+            this.mode === 'boss' || this.mode === 'adventure'
+              ? this.bosses.cleared
+              : this.sector,
           autofire: this.usedAutofire,
           mode: this.mode,
         });
@@ -485,7 +562,7 @@ export class Game {
     if (this.state !== 'play') return;
     this.state = 'win';
     playMusic('menu');
-    void this.pulseSession();
+    if (this.mode !== 'adventure') void this.pulseSession();
     if (this.score > this.best) {
       this.best = this.score;
       try {
@@ -759,7 +836,7 @@ export class Game {
         }
       }
       // Prefer boss if closer / in cone on first hops
-      if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead && !hitBoss) {
+      if (this.bossCombat() && this.bosses.boss && !this.bosses.boss.dead && !hitBoss) {
         const b = this.bosses.boss;
         const dx = b.x - from.x;
         const dy = b.y - from.y;
@@ -804,7 +881,7 @@ export class Game {
     ringFx(this.rings, this.player.x, this.player.y, '#ffffff', 30, Math.max(this.W, this.H) * 0.8, 0.75);
     ringFx(this.rings, this.player.x, this.player.y, '#63f7ff', 10, Math.max(this.W, this.H) * 0.55, 1.0);
     for (const e of this.enemies) if (!e.dead) this.killEnemy(e, true);
-    if (this.mode === 'boss') this.bosses.applyBomb(this.bossHost());
+    if (this.bossCombat()) this.bosses.applyBomb(this.bossHost());
     this.ebullets.length = 0;
     spark(this.parts, this.player.x, this.player.y, '#ffffff', 60, 700, 1.1, 3);
   }
@@ -904,12 +981,12 @@ export class Game {
     return this.safeSpawnPoint();
   }
 
-  damage(e: Enemy, amount: number): void {
+  damage(e: Enemy, amount: number, critical = false): void {
     if (e.dead || e.birth > 0) return;
     e.hp -= amount;
     e.flash = 0.12;
     if (e.type === 'singular') e.grow = (e.grow || 0) + amount * 0.7;
-    if (e.hp <= 0) this.killEnemy(e, false);
+    if (e.hp <= 0) this.killEnemy(e, false, true, critical);
     else {
       SFX.hit();
       spark(this.parts, e.x, e.y, e.col, 3, 140, 0.28, 1.8);
@@ -917,30 +994,34 @@ export class Game {
   }
 
   /** @param award false = death-clear / no credit (no score, gems, splits). */
-  killEnemy(e: Enemy, byBomb: boolean, award = true): void {
+  killEnemy(e: Enemy, byBomb: boolean, award = true, critical = false): void {
     if (e.dead) return;
     e.dead = true;
     const t = ETYPE[e.type];
     if (award) {
-      const gained = t.score * this.mult;
+      const critMul = critical ? 2.5 : 1;
+      const gained = Math.round(t.score * this.mult * critMul);
       this.addScore(gained);
       this.kills++;
-      this.pushScorePop(e.x, e.y, gained, e.col);
+      this.pushScorePop(e.x, e.y, gained, critical ? '#ffb02e' : e.col);
+      if (critical) {
+        this.pushFloatText(e.x, e.y - 26, 'CRITICAL HIT', '#ffb02e');
+        SFX.comboMax();
+      }
     }
-    spark(
-      this.parts,
-      e.x,
-      e.y,
-      e.col,
-      e.type === 'singular' ? 40 : 12 + e.r,
-      e.type === 'singular' ? 520 : 300,
-      0.85,
-      2.6,
-    );
-    this.grid.impulse(e.x, e.y, e.type === 'singular' ? 30 : 7, e.r * 9);
-    ringFx(this.rings, e.x, e.y, e.col, e.r * 0.8, e.r * 4.5, 0.35);
-    this.shake = Math.max(this.shake, e.r * 0.22);
-    if (e.type === 'singular') {
+    const big = e.type === 'singular';
+    let power = big ? 3.2 : 0.95 + e.r / 18;
+    if (byBomb) power *= 0.75;
+    if (critical) power *= 1.55;
+    if (this.reducedMotion || this.isMobile) power *= 0.55;
+    explode(this.parts, this.rings, e.x, e.y, critical ? '#ffb02e' : e.col, power);
+    this.grid.impulse(e.x, e.y, big ? 30 : 7 + e.r * 0.35, e.r * 11);
+    this.shake = Math.max(this.shake, e.r * (critical ? 0.9 : 0.32));
+    if (critical) {
+      this.shake = Math.max(this.shake, 18);
+      this.hitstop = Math.max(this.hitstop, 0.05);
+    }
+    if (big) {
       if (award) SFX.big();
       this.shake = Math.max(this.shake, 18);
       if (award) {
@@ -949,7 +1030,7 @@ export class Game {
           this.spawnEnemy('shard', e.x + Math.cos(a) * 46, e.y + Math.sin(a) * 46);
         }
       }
-    } else if (award) {
+    } else if (award && !critical) {
       SFX.pop(this.hitChain);
     }
 
@@ -1189,7 +1270,7 @@ export class Game {
       }
     }
     this.sessionBeatT += dt;
-    if (this.sessionBeatT >= 5) void this.pulseSession();
+    if (this.mode !== 'adventure' && this.sessionBeatT >= 5) void this.pulseSession();
     const ets = this.buffs.timewarp > 0 ? 0.32 : 1;
     for (const k of Object.keys(this.buffs) as (keyof typeof this.buffs)[]) {
       if (this.buffs[k] > 0) this.buffs[k] = Math.max(0, this.buffs[k] - dt);
@@ -1210,13 +1291,15 @@ export class Game {
     }
     this.player.x += this.player.vx * dt;
     this.player.y += this.player.vy * dt;
-    if (this.player.x < 16) {
-      this.player.x = 16;
+    const boundL = this.mode === 'adventure' ? this.adventure.boundLeft() : 16;
+    const boundR = this.mode === 'adventure' ? this.adventure.boundRight(this.W) : this.W - 16;
+    if (this.player.x < boundL) {
+      this.player.x = boundL;
       this.player.vx = Math.abs(this.player.vx) * 0.4;
       this.grid.impulse(this.player.x, this.player.y, 4, 170);
     }
-    if (this.player.x > this.W - 16) {
-      this.player.x = this.W - 16;
+    if (this.player.x > boundR) {
+      this.player.x = boundR;
       this.player.vx = -Math.abs(this.player.vx) * 0.4;
       this.grid.impulse(this.player.x, this.player.y, 4, 170);
     }
@@ -1301,7 +1384,7 @@ export class Game {
           }
           let tx = best?.x;
           let ty = best?.y;
-          if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+          if (this.bossCombat() && this.bosses.boss && !this.bosses.boss.dead) {
             const b = this.bosses.boss;
             const q = (b.x - dx) ** 2 + (b.y - dy) ** 2;
             if (q < bd) {
@@ -1341,7 +1424,7 @@ export class Game {
           if (Math.random() < 0.5) spark(this.parts, e.x, e.y, '#ff8fd0', 1, 120, 0.2, 1.6);
         }
       }
-      if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+      if (this.bossCombat() && this.bosses.boss && !this.bosses.boss.dead) {
         const boss = this.bosses.boss;
         const dx = boss.x - this.player.x;
         const dy = boss.y - this.player.y;
@@ -1386,7 +1469,8 @@ export class Game {
     this.updateDrops(dt);
     this.updateFx(dt);
     this.grid.update(dt);
-    if (this.mode === 'boss') this.bosses.update(dt, this.bossHost());
+    if (this.mode === 'adventure') this.adventure.update(dt, this.adventureHost());
+    else if (this.mode === 'boss') this.bosses.update(dt, this.bossHost());
     else this.director(dt);
     this.shake = Math.max(0, this.shake - dt * 46);
   }
@@ -1415,7 +1499,7 @@ export class Game {
             found = true;
           }
         }
-        if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+        if (this.bossCombat() && this.bosses.boss && !this.bosses.boss.dead) {
           const boss = this.bosses.boss;
           const q = (boss.x - b.x) ** 2 + (boss.y - b.y) ** 2;
           if (q < bd) {
@@ -1470,7 +1554,7 @@ export class Game {
         this.bullets.splice(i, 1);
         continue;
       }
-      if (this.mode === 'boss') {
+      if (this.bossCombat()) {
         const src = b.src || (b.rail ? 'rail' : b.homing ? 'swarm' : 'pulse');
         const hit = this.bosses.tryHit(this.bossHost(), b.x, b.y, b.r, b.dmg, src, {
           ang: Math.atan2(b.vy, b.vx),
@@ -1514,6 +1598,15 @@ export class Game {
           this.bullets.splice(i, 1);
           continue;
         }
+      } else if (
+        this.mode === 'adventure' &&
+        this.adventure.tryHitHazard(b.x, b.y, b.r, b.dmg, this.parts, this.rings)
+      ) {
+        if (!b.rail) {
+          spark(this.parts, b.x, b.y, b.col, 4, 180, 0.25, 2);
+          this.bullets.splice(i, 1);
+        }
+        continue;
       }
       for (const e of this.enemies) {
         if (e.dead || e.birth > 0) continue;
@@ -1528,12 +1621,13 @@ export class Game {
             b.vy = ny * 760 + rnd(160, -160);
             b.life = Math.min(b.life, 0.65);
             b.ricochet = (b.ricochet || 0) + 1;
+            b.shieldBounce = true;
             spark(this.parts, b.x, b.y, '#ff7a3d', 4, 180, 0.25, 2);
             SFX.bounce();
             continue;
           }
         }
-        this.damage(e, b.dmg);
+        this.damage(e, b.dmg, !!b.shieldBounce);
         e.vx += b.vx * 0.045;
         e.vy += b.vy * 0.045;
         if (b.src === 'vortex') {
@@ -1650,7 +1744,7 @@ export class Game {
           this.damage(e, WEAPONS.vortex.dmg * dt * (0.55 + (1 - dd / R)));
         }
       }
-      if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+      if (this.bossCombat() && this.bosses.boss && !this.bosses.boss.dead) {
         const b = this.bosses.boss;
         const dx = v.x - b.x;
         const dy = v.y - b.y;
@@ -1698,7 +1792,7 @@ export class Game {
           this.damage(e, 7 * dt);
         }
       }
-      if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+      if (this.bossCombat() && this.bosses.boss && !this.bosses.boss.dead) {
         const b = this.bosses.boss;
         const dx = b.x - this.player.x;
         const dy = b.y - this.player.y;
@@ -1728,7 +1822,7 @@ export class Game {
             e.vy += Math.sin(a + Math.PI / 2) * 40 * dt;
           }
         }
-        if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+        if (this.bossCombat() && this.bosses.boss && !this.bosses.boss.dead) {
           const boss = this.bosses.boss;
           const dx = boss.x - bx;
           const dy = boss.y - by;
@@ -1912,11 +2006,12 @@ export class Game {
         }
         e.x += e.vx * dt * ets;
         e.y += e.vy * dt * ets;
+        const openX = this.mode === 'adventure' && !this.adventure.isBossPhase();
         if (e.vx !== 0) {
-          if (e.x < e.r) {
+          if (!openX && e.x < e.r) {
             e.x = e.r;
             e.vx = sp;
-          } else if (e.x > this.W - e.r) {
+          } else if (!openX && e.x > this.W - e.r) {
             e.x = this.W - e.r;
             e.vx = -sp;
           }
@@ -1942,13 +2037,16 @@ export class Game {
         e.x += e.vx * dt * ets;
         e.y += e.vy * dt * ets;
 
-        if (e.x < e.r) {
-          e.x = e.r;
-          e.vx = Math.abs(e.vx);
-        }
-        if (e.x > this.W - e.r) {
-          e.x = this.W - e.r;
-          e.vx = -Math.abs(e.vx);
+        const openX = this.mode === 'adventure' && !this.adventure.isBossPhase();
+        if (!openX) {
+          if (e.x < e.r) {
+            e.x = e.r;
+            e.vx = Math.abs(e.vx);
+          }
+          if (e.x > this.W - e.r) {
+            e.x = this.W - e.r;
+            e.vx = -Math.abs(e.vx);
+          }
         }
         if (e.y < e.r) {
           e.y = e.r;
@@ -1959,6 +2057,17 @@ export class Game {
           e.vy = -Math.abs(e.vy);
         }
       }
+
+      // Adventure scroll — let enemies leave the frame instead of piling on the wall
+      if (
+        this.mode === 'adventure' &&
+        !this.adventure.isBossPhase() &&
+        (e.x < -100 || e.x > this.W + 140)
+      ) {
+        e.dead = true;
+        continue;
+      }
+
       this.grid.impulse(e.x, e.y, e.type === 'singular' ? 0 : -0.22, e.r * 3.6);
 
       if (this.hitPlayer(e.x, e.y, e.r)) this.hurtPlayer();
@@ -1971,7 +2080,7 @@ export class Game {
         }
       }
     }
-    if (this.mode === 'boss' && this.bosses.touchesPlayer(this.player)) {
+    if (this.bossCombat() && this.bosses.touchesPlayer(this.player)) {
       this.hurtPlayer();
     }
   }
@@ -2817,12 +2926,19 @@ export class Game {
       fx: lerp(this.W * 0.5, this.player.x, 0.28),
       fy: lerp(this.H * 0.5, this.player.y, 0.28),
       t: this.gameT,
+      scrollX: this.mode === 'adventure' ? this.adventure.gridScrollX : 0,
     });
     ctx.beginPath();
     ctx.rect(2, 2, this.W - 4, this.H - 4);
     ctx.strokeStyle = 'rgba(99,247,255,.28)';
     ctx.lineWidth = 2;
     ctx.stroke();
+
+    // Adventure city must be source-over — lighter mode makes towers look see-through
+    if (this.mode === 'adventure') {
+      ctx.globalCompositeOperation = 'source-over';
+      this.adventure.draw(ctx, this.gameT, this.W, this.H);
+    }
 
     ctx.globalCompositeOperation = 'lighter';
 
@@ -2879,7 +2995,7 @@ export class Game {
       ctx.globalAlpha = 1;
     }
     for (const e of this.enemies) this.drawEnemy(e);
-    if (this.mode === 'boss') this.bosses.draw(ctx, this.gameT);
+    if (this.bossCombat()) this.bosses.draw(ctx, this.gameT);
     this.drawVortices();
     for (const b of this.bullets) {
       if (b.rail) {

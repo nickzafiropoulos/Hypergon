@@ -155,7 +155,7 @@ type RunStats = {
   elapsed: number;
   sector: number;
   autofire: boolean;
-  mode?: 'survival' | 'boss';
+  mode?: 'survival' | 'boss' | 'adventure';
 };
 
 export class Overlays {
@@ -282,6 +282,10 @@ export class Overlays {
           <span class="mode-card-title">BEAT THE BOSSES</span>
           <span class="mode-card-blurb">Defeat 20 bosses in a row.</span>
         </button>
+        <button type="button" class="mode-card" id="mode-adventure">
+          <span class="mode-card-title">ADVENTURE</span>
+          <span class="mode-card-blurb">Auto-scroll. 10 bosses. No leaderboard.</span>
+        </button>
       </div>
       <button class="cta secondary" id="back" type="button">Back</button>
       <p class="fine">or press Enter for Survival</p>`;
@@ -294,6 +298,10 @@ export class Overlays {
       this.selectingMode = false;
       this.game.startRun('boss');
     };
+    document.getElementById('mode-adventure')!.onclick = () => {
+      this.selectingMode = false;
+      this.game.startRun('adventure');
+    };
     document.getElementById('back')!.onclick = () => {
       void this.menuPanel();
     };
@@ -305,7 +313,9 @@ export class Overlays {
     const modeTag =
       this.game.mode === 'boss'
         ? `Boss ${this.game.bosses.progressLabel()} · ${formatTime(this.game.elapsed)} · ×${this.game.mult}`
-        : `Sector ${this.game.sector} · ×${this.game.mult}`;
+        : this.game.mode === 'adventure'
+          ? `Level ${this.game.adventure.progressLabel()} · ${formatTime(this.game.elapsed)} · ×${this.game.mult}`
+          : `Sector ${this.game.sector} · ×${this.game.mult}`;
     this.panel.innerHTML = `
       <h1 class="glyph" style="font-size:clamp(34px,7vw,74px)">HOLDING</h1>
       <p class="tag">Score ${this.game.score.toLocaleString('en-GB')} · ${modeTag}</p>
@@ -397,7 +407,33 @@ export class Overlays {
   async overPanel(stats: RunStats): Promise<void> {
     stopConfetti();
     this.selectingMode = false;
-    const bossMode = stats.mode === 'boss' || this.game.mode === 'boss';
+    const adventureMode = stats.mode === 'adventure' || this.game.mode === 'adventure';
+    const bossMode = !adventureMode && (stats.mode === 'boss' || this.game.mode === 'boss');
+    if (adventureMode) {
+      const bossesCleared = this.game.bosses.cleared;
+      this.panel.innerHTML = `
+      <h1 class="glyph" style="font-size:clamp(34px,7vw,74px)">SIGNAL LOST</h1>
+      <div class="stats">
+        <div><span class="lbl">Score</span><div class="val">${stats.score.toLocaleString('en-GB')}</div></div>
+        <div><span class="lbl">Best</span><div class="val" style="color:var(--acid)">${stats.best.toLocaleString('en-GB')}</div></div>
+        <div><span class="lbl">Bosses</span><div class="val">${bossesCleared}</div></div>
+        <div><span class="lbl">Time</span><div class="val">${formatTime(stats.elapsed)}</div></div>
+      </div>
+      <div class="cta-stack">
+        <button class="cta" id="go" type="button">Try again</button>
+        <button class="cta secondary" id="quit" type="button">Quit to start screen</button>
+      </div>
+      <p class="fine">or press Enter to try again</p>`;
+      this.show();
+      document.getElementById('go')!.onclick = () => {
+        this.game.startRun();
+      };
+      document.getElementById('quit')!.onclick = () => {
+        this.game.state = 'menu';
+        void this.menuPanel();
+      };
+      return;
+    }
     const boardMode = bossMode ? 'boss' : 'survival';
     const bossesCleared = bossMode ? this.game.bosses.cleared : 0;
     const [scores] = await Promise.all([
@@ -440,6 +476,32 @@ export class Overlays {
   async victoryPanel(stats: RunStats): Promise<void> {
     stopConfetti();
     this.selectingMode = false;
+    const adventureMode = stats.mode === 'adventure' || this.game.mode === 'adventure';
+    if (adventureMode) {
+      this.panel.innerHTML = `
+      <h1 class="glyph" style="font-size:clamp(34px,7vw,74px)">SECTOR CLEARED</h1>
+      <p class="tag">10 bosses down</p>
+      <div class="stats">
+        <div><span class="lbl">Score</span><div class="val">${stats.score.toLocaleString('en-GB')}</div></div>
+        <div><span class="lbl">Best</span><div class="val" style="color:var(--acid)">${stats.best.toLocaleString('en-GB')}</div></div>
+        <div><span class="lbl">Bosses</span><div class="val">10</div></div>
+        <div><span class="lbl">Time</span><div class="val">${formatTime(stats.elapsed)}</div></div>
+      </div>
+      <div class="cta-stack">
+        <button class="cta" id="go" type="button">Try again</button>
+        <button class="cta secondary" id="quit" type="button">Quit to start screen</button>
+      </div>
+      <p class="fine">or press Enter to try again</p>`;
+      this.show();
+      document.getElementById('go')!.onclick = () => {
+        this.game.startRun('adventure');
+      };
+      document.getElementById('quit')!.onclick = () => {
+        this.game.state = 'menu';
+        void this.menuPanel();
+      };
+      return;
+    }
     const [scores] = await Promise.all([fetchBossScores(), waitForGameSession()]);
     const hasSession = !!getSessionToken();
     const canSubmit = isLeaderboardConfigured() && hasSession;

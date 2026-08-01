@@ -301,12 +301,24 @@ export const SFX = {
     noise(0.04, 0.05, 3000, 'highpass');
   },
 
-  /** Kill — pitch rises slightly with hit chain. */
+  /** Kill explosion — layered boom, crunch, crack; pitch climbs with chain. */
   pop(chain = 1) {
-    const p = 1 + Math.min(chain, 8) * 0.055;
-    noise(0.16, 0.12, 1800);
-    tone(rnd(220, 150) * p, 0.16, 'triangle', 0.048, -100 * p);
-    tone(rnd(520, 380) * p, 0.08, 'sine', 0.022, -200);
+    const p = 1 + Math.min(chain, 8) * 0.045;
+    // Sub boom
+    noise(0.28, 0.16, 420, 'lowpass');
+    tone(rnd(68, 42) * p, 0.32, 'sine', 0.11, -28);
+    // Mid body crunch
+    noise(0.16, 0.11, 1400, 'bandpass');
+    tone(rnd(200, 130) * p, 0.2, 'sawtooth', 0.05, -110);
+    // Bright crack / shatter
+    noise(0.07, 0.09, 5200, 'highpass');
+    tone(rnd(980, 620) * p, 0.055, 'square', 0.032, -520);
+    // Ember tail
+    later(35, () => {
+      noise(0.14, 0.07, 900, 'lowpass');
+      tone(rnd(140, 90) * p, 0.18, 'triangle', 0.028, -60);
+    });
+    later(85, () => tone(rnd(55, 36), 0.22, 'sine', 0.045, -18));
   },
 
   big() {

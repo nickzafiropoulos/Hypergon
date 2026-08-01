@@ -11,7 +11,7 @@ import type {
 import { BOSS_COUNT, bossAt, type BossDef } from './bosses';
 import { bombDamageFor, computeBossDamage, type DamageCtx } from './bossDamage';
 import { EnvSystem } from './EnvSystem';
-import { clamp, len, norm, pick, rnd, TAU } from './maths';
+import { clamp, len, norm, pick, rnd, TAU, spawnVisual } from './maths';
 import { playBossMusic } from './music';
 import { ringFx, spark } from './particles';
 
@@ -36,6 +36,8 @@ export type BossHost = {
   pushScorePop: (x: number, y: number, value: number, col: string) => void;
   gridImpulse: (x: number, y: number, force: number, rad: number) => void;
   onBossVictory: () => void;
+  /** Adventure: called after a single fight clear instead of auto-ladder. */
+  onFightCleared?: () => void;
   hurtPlayer: () => void;
   spawnBossGems: (x: number, y: number, n: number) => void;
   pushFloatText: (x: number, y: number, text: string, col: string) => void;
@@ -56,6 +58,9 @@ export class BossDirector {
   timer = 0;
   gameT = 0;
   private critToastCd = 0;
+  /** When true, killBoss yields via onFightCleared instead of laddering. */
+  private yieldOnClear = false;
+  private rosterLimit = BOSS_COUNT;
 
   reset(): void {
     this.env.clear();
@@ -66,11 +71,34 @@ export class BossDirector {
     this.timer = 0.6;
     this.gameT = 0;
     this.critToastCd = 0;
+    this.yieldOnClear = false;
+    this.rosterLimit = BOSS_COUNT;
   }
 
   begin(host: BossHost): void {
     this.reset();
     this.spawnFight(host);
+  }
+
+  /** Adventure: start one fight at roster index; yields on clear. */
+  beginFight(host: BossHost, index: number): void {
+    this.env.clear();
+    this.boss = null;
+    this.index = index;
+    this.phase = 'fight';
+    this.timer = 0;
+    this.critToastCd = 0;
+    this.yieldOnClear = true;
+    this.rosterLimit = BOSS_COUNT;
+    this.spawnFight(host);
+  }
+
+  /** Soft teardown after Adventure yields control back to scroll. */
+  endFight(): void {
+    this.env.clear();
+    this.boss = null;
+    this.phase = 'done';
+    this.yieldOnClear = false;
   }
 
   private def(): BossDef {
@@ -136,7 +164,8 @@ export class BossDirector {
       spin: 0.6,
       phase: 0,
       dead: false,
-      birth: 1.1,
+      birth: 0.48,
+      birthMax: 0.48,
       flash: 0,
       wob: 0,
       sa: 0,
@@ -217,7 +246,7 @@ export class BossDirector {
     if (this.phase === 'intermission') {
       this.timer -= dt;
       if (this.timer <= 0) {
-        if (this.index >= BOSS_COUNT) {
+        if (this.index >= this.rosterLimit) {
           this.phase = 'done';
           host.onBossVictory();
           return;
@@ -234,7 +263,8 @@ export class BossDirector {
     const ets = host.buffs.timewarp > 0 ? 0.32 : 1;
 
     if (b.birth > 0) {
-      b.birth -= dt;
+      b.birth = Math.max(0, b.birth - dt);
+      this.env.tickIntro(dt);
       return;
     }
 
@@ -906,7 +936,16 @@ export class BossDirector {
     this.env.clear();
 
     this.index++;
-    if (this.index >= BOSS_COUNT) {
+
+    if (this.yieldOnClear) {
+      this.phase = 'done';
+      this.boss = null;
+      this.yieldOnClear = false;
+      host.onFightCleared?.();
+      return;
+    }
+
+    if (this.index >= this.rosterLimit) {
       this.phase = 'done';
       host.toast('ALL BOSSES DOWN', 'sector cleared', 2400, '#b8ff3d');
       setTimeout(() => host.onBossVictory(), 1200);
@@ -918,7 +957,7 @@ export class BossDirector {
     this.timer = 2.5;
     this.boss = null;
     const next = bossAt(this.index);
-    host.toast('NEXT', `${this.index + 1} / ${BOSS_COUNT}`, 1200, '#63f7ff');
+    host.toast('NEXT', `${this.index + 1} / ${this.rosterLimit}`, 1200, '#63f7ff');
     this.spawnIntermissionDrop(host, next);
   }
 
@@ -959,12 +998,25 @@ export class BossDirector {
   }
 
   draw(ctx: CanvasRenderingContext2D, t: number): void {
-    this.env.draw(ctx, t);
+    const intro = this.boss && !this.boss.dead ? spawnVisual(this.boss.birth, this.boss.birthMax) : null;
+    this.env.draw(ctx, t, intro?.scale ?? 1);
     if (!this.boss || this.boss.dead) return;
     const b = this.boss;
     const def = this.def();
-    this.drawBossShape(ctx, b, def, t);
+
+    ctx.save();
+    if (intro && intro.scale < 0.999) {
+      ctx.translate(b.x, b.y);
+      ctx.scale(intro.scale, intro.scale);
+      ctx.translate(-b.x, -b.y);
+    }
+    this.drawBossShape(ctx, b, def, t, intro?.alpha ?? 1);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = intro?.alpha ?? 1;
     this.drawHpBar(ctx, b, def);
+    ctx.restore();
   }
 
   private drawHpBar(ctx: CanvasRenderingContext2D, b: BossRuntime, def: BossDef): void {
@@ -1001,9 +1053,12 @@ export class BossDirector {
     b: BossRuntime,
     def: BossDef,
     t: number,
+    spawnAlpha = 1,
   ): void {
     const flash = b.flash > 0;
-    const alpha = b.birth > 0 ? 0.35 : def.id === 'phase_lattice' && !b.solid ? 0.28 : 1;
+    const base =
+      def.id === 'phase_lattice' && !b.solid && b.birth <= 0 ? 0.28 : 1;
+    const alpha = spawnAlpha * base;
 
     // Serpent body
     if (def.id === 'serpent_regent') {
@@ -1818,8 +1873,8 @@ export class BossDirector {
     ctx.restore();
   }
 
-  progressLabel(): string {
-    const n = Math.min(this.cleared + (this.phase === 'fight' ? 1 : 0), BOSS_COUNT);
-    return String(n).padStart(2, '0') + '/' + String(BOSS_COUNT).padStart(2, '0');
+  progressLabel(limit = this.rosterLimit): string {
+    const n = Math.min(this.cleared + (this.phase === 'fight' ? 1 : 0), limit);
+    return String(n).padStart(2, '0') + '/' + String(limit).padStart(2, '0');
   }
 }

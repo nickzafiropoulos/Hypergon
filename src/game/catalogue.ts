@@ -110,8 +110,8 @@ export const GEM_LIFE = 4.5;
 export const GEM_FLASH = 0.7;
 
 export const MAX_ENEMIES = 90;
-export const MAX_PARTICLES = 420;
-export const MAX_RINGS = 48;
+export const MAX_PARTICLES = 1800;
+export const MAX_RINGS = 120;
 export const MAX_GEMS = 180;
 
 /** Ship pulls multiplier cores inward when they enter this radius. */

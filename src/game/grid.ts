@@ -13,6 +13,8 @@ export type GridView = {
   fx: number;
   fy: number;
   t?: number;
+  /** Horizontal world scroll — grid lines drift left for travel feel. */
+  scrollX?: number;
 };
 
 export class WarpGrid {
@@ -150,6 +152,7 @@ export class WarpGrid {
     const cx = view?.fx ?? this.W * 0.5;
     const cy = view?.fy ?? this.H * 0.5;
     const t = view?.t ?? 0;
+    const scrollX = view?.scrollX ?? 0;
     const radius = Math.hypot(this.W, this.H) * 0.55 || 1;
     const strength = this.reduced ? 0 : 0.045;
 
@@ -165,6 +168,7 @@ export class WarpGrid {
         'rgba(36,52,110,.14)',
         0.65,
         false,
+        scrollX,
       );
     }
 
@@ -177,6 +181,7 @@ export class WarpGrid {
       'rgba(58,84,158,.34)',
       1,
       true,
+      scrollX,
     );
   }
 
@@ -189,18 +194,21 @@ export class WarpGrid {
     coldCol: string,
     lineW: number,
     withHot: boolean,
+    scrollX = 0,
   ): void {
     ctx.lineWidth = lineW;
     ctx.beginPath();
     const hot: number[] = [];
+    const ox = ((scrollX % this.gap) + this.gap) % this.gap;
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const i = r * this.cols + c;
         const p = this.points[i]!;
-        const a = projectBowl(p.x, p.y, cx, cy, radius, strength);
+        const px = p.x - ox;
+        const a = projectBowl(px, p.y, cx, cy, radius, strength);
         if (c < this.cols - 1) {
           const q = this.points[i + 1]!;
-          const b = projectBowl(q.x, q.y, cx, cy, radius, strength);
+          const b = projectBowl(q.x - ox, q.y, cx, cy, radius, strength);
           const s =
             Math.abs(p.x - p.ax) +
             Math.abs(q.x - q.ax) +
@@ -215,7 +223,7 @@ export class WarpGrid {
         }
         if (r < this.rows - 1) {
           const q = this.points[i + this.cols]!;
-          const b = projectBowl(q.x, q.y, cx, cy, radius, strength);
+          const b = projectBowl(q.x - ox, q.y, cx, cy, radius, strength);
           const s =
             Math.abs(p.x - p.ax) +
             Math.abs(q.x - q.ax) +

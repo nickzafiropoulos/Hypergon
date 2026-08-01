@@ -69,6 +69,17 @@ export class Hud {
         this.el.timer.textContent = stamp;
         this.lastTimer = stamp;
       }
+    } else if (game.mode === 'adventure') {
+      this.el.waveLbl.textContent = 'Level';
+      this.el.wave.textContent = game.adventure.progressLabel();
+      this.el.wave.style.fontSize = '16px';
+      this.el.timerLbl.classList.remove('hide');
+      this.el.timer.classList.remove('hide');
+      const stamp = formatHudTimer(game.elapsed);
+      if (this.lastTimer !== stamp) {
+        this.el.timer.textContent = stamp;
+        this.lastTimer = stamp;
+      }
     } else {
       this.el.waveLbl.textContent = 'Sector';
       this.el.wave.textContent = String(game.sector).padStart(2, '0');
