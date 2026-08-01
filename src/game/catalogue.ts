@@ -54,7 +54,7 @@ export const POWERS: Record<PowerKey, { name: string; col: string; blurb: string
   magnet: { name: 'LODESTONE', col: '#b8ff3d', blurb: 'gems come to you' },
   drones: { name: 'WINGMEN', col: '#ff3fa4', blurb: 'two escort drones' },
   bomb: { name: '+1 SHOCK', col: '#ffffff', blurb: '' },
-  life: { name: '+1 HULL', col: '#4dffc3', blurb: '' },
+  life: { name: '+1 LIFE', col: '#4dffc3', blurb: '' },
 };
 
 /** Multiplier geodes — tiny cyan triangles, distinct from weaver acid-green. */

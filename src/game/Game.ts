@@ -436,9 +436,9 @@ export class Game {
       SFX.power();
       if (this.lives < 5) {
         this.lives++;
-        this.toast('+1 HULL', `${at.toLocaleString('en-GB')} score`, 1200, '#4dffc3');
+        this.toast('+1 LIFE', `${at.toLocaleString('en-GB')} score`, 1200, '#4dffc3');
       } else {
-        this.toast('HULL MAX', `${at.toLocaleString('en-GB')} score`, 900, '#4dffc3');
+        this.toast('LIFE MAX', `${at.toLocaleString('en-GB')} score`, 900, '#4dffc3');
       }
     }
   }
