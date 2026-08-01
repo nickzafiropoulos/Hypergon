@@ -933,13 +933,16 @@ export class BossDirector {
       'magnet',
       'drones',
       'bomb',
+      'mirror',
+      'razor',
+      'ghost',
     ] as const);
     if (next.hintDrop) {
       kind = next.hintDrop.kind;
       key = next.hintDrop.key;
     } else if (Math.random() < 0.45) {
       kind = 'weapon';
-      key = pick(['scatter', 'lance', 'swarm', 'arc', 'rail'] as const);
+      key = pick(['scatter', 'lance', 'swarm', 'arc', 'rail', 'nova', 'vortex', 'helix'] as const);
     }
     host.drops.length = 0;
     host.drops.push({

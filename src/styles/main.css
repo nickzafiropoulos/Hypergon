@@ -251,13 +251,19 @@ canvas.screen-confetti {
 .glyph {
   font-size: clamp(46px, 9vw, 104px);
   font-weight: 700;
-  letter-spacing: 0.24em;
+  letter-spacing: 0.14em;
   margin: 0 0 28px;
   background: linear-gradient(96deg, var(--ion), var(--plasma) 55%, var(--amber));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 26px rgba(99, 247, 255, 0.35));
+  /* Chakra Petch tops at 700 — fatten the clipped fill with a silhouette */
+  filter:
+    drop-shadow(1.1px 0 0 rgba(234, 246, 255, 0.7))
+    drop-shadow(-1.1px 0 0 rgba(234, 246, 255, 0.7))
+    drop-shadow(0 1.1px 0 rgba(234, 246, 255, 0.7))
+    drop-shadow(0 -1.1px 0 rgba(234, 246, 255, 0.7))
+    drop-shadow(0 0 26px rgba(99, 247, 255, 0.35));
 }
 .logo {
   display: inline-block;
@@ -491,10 +497,15 @@ canvas.screen-confetti {
 }
 .board-title.glyph {
   font-size: clamp(18px, 3.2vw, 26px);
-  letter-spacing: 0.28em;
+  letter-spacing: 0.2em;
   margin: 0 0 18px;
   text-align: center;
-  filter: drop-shadow(0 0 16px rgba(99, 247, 255, 0.3));
+  filter:
+    drop-shadow(0.6px 0 0 rgba(234, 246, 255, 0.65))
+    drop-shadow(-0.6px 0 0 rgba(234, 246, 255, 0.65))
+    drop-shadow(0 0.6px 0 rgba(234, 246, 255, 0.65))
+    drop-shadow(0 -0.6px 0 rgba(234, 246, 255, 0.65))
+    drop-shadow(0 0 16px rgba(99, 247, 255, 0.3));
 }
 .board-tabs {
   display: grid;

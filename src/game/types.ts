@@ -73,10 +73,15 @@ export type DamageSource =
   | 'swarm'
   | 'arc'
   | 'rail'
+  | 'nova'
+  | 'vortex'
+  | 'helix'
   | 'drone'
   | 'bomb'
   | 'mine'
-  | 'env';
+  | 'env'
+  | 'razor'
+  | 'ghost';
 
 export type BossRuntime = {
   defId: BossId;
@@ -239,6 +244,16 @@ export type RailFlash = {
   ay: number;
   life: number;
   max: number;
+};
+
+/** Player-fired gravity well from the VORTEX weapon. */
+export type VortexField = {
+  x: number;
+  y: number;
+  life: number;
+  max: number;
+  r: number;
+  pulse: number;
 };
 
 /** Floating +score readout over a killed enemy. */

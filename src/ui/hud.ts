@@ -104,6 +104,9 @@ export class Hud {
     if (game.buffs.timewarp > 0) rows.push(['STASIS', '#a98bff', game.buffs.timewarp / 9]);
     if (game.buffs.magnet > 0) rows.push(['LODESTONE', '#b8ff3d', game.buffs.magnet / 14]);
     if (game.buffs.drones > 0) rows.push(['WINGMEN', '#ff3fa4', game.buffs.drones / 16]);
+    if (game.buffs.mirror > 0) rows.push(['REFLEX', '#e8f0ff', game.buffs.mirror / 9]);
+    if (game.buffs.razor > 0) rows.push(['ORBIT', '#ff6b4a', game.buffs.razor / 11]);
+    if (game.buffs.ghost > 0) rows.push(['PHASE', '#b8a0ff', game.buffs.ghost / 7]);
     let bh = '';
     for (const [n, c, f] of rows) {
       bh += `<div class="buff" style="color:${c}"><span>${n}</span><span class="bar"><i style="background:${c};transform:scaleX(${f.toFixed(3)})"></i></span></div>`;

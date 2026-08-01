@@ -43,6 +43,7 @@ import type {
   RailFlash,
   Ring,
   ScorePop,
+  VortexField,
 } from './types';
 import { InputSystem } from '../input/InputSystem';
 
@@ -95,6 +96,9 @@ export class Game {
   rings: Ring[] = [];
   railFlashes: RailFlash[] = [];
   scorePops: ScorePop[] = [];
+  vortices: VortexField[] = [];
+  helixSpin = 0;
+  razorAng = 0;
   /** Consecutive kill chain for floating score size. */
   hitChain = 0;
   hitChainT = 0;
@@ -123,10 +127,13 @@ export class Game {
     swarm: 0,
     arc: 0,
     rail: 0,
+    nova: 0,
+    vortex: 0,
+    helix: 0,
   };
   fireCd = 0;
   beam: Beam | null = null;
-  buffs = { overdrive: 0, timewarp: 0, magnet: 0, drones: 0 };
+  buffs = { overdrive: 0, timewarp: 0, magnet: 0, drones: 0, mirror: 0, razor: 0, ghost: 0 };
   shieldHits = 0;
   droneAng = 0;
   gemBank = 0;
@@ -245,6 +252,9 @@ export class Game {
     this.rings.length = 0;
     this.railFlashes.length = 0;
     this.scorePops.length = 0;
+    this.vortices.length = 0;
+    this.helixSpin = 0;
+    this.razorAng = 0;
     this.hitChain = 0;
     this.hitChainT = 0;
     this.sessionBeatT = 0;
@@ -539,6 +549,9 @@ export class Game {
     swarm: 25,
     arc: 0,
     rail: 0,
+    nova: 280,
+    vortex: 90,
+    helix: 8,
   };
 
   shoot(ax: number, ay: number, dt: number): void {
@@ -652,6 +665,72 @@ export class Game {
         this.grid.impulse(px, py, 14, 280);
         break;
       }
+      case 'nova': {
+        const n = 18;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * TAU + rnd(0.08, -0.08);
+          const sp = rnd(920, 640) * spd;
+          this.bullets.push(
+            this.mkBullet(
+              this.player.x,
+              this.player.y,
+              Math.cos(a) * sp,
+              Math.sin(a) * sp,
+              w.dmg,
+              3.4,
+              i % 2 ? '#ff5ce0' : '#ffe0f5',
+              1,
+              0.55,
+              'nova',
+            ),
+          );
+        }
+        this.ammo.nova--;
+        SFX.bomb();
+        this.shake = Math.max(this.shake, 12);
+        this.hitstop = Math.max(this.hitstop, 0.035);
+        ringFx(this.rings, this.player.x, this.player.y, '#ff5ce0', 18, 220, 0.4);
+        this.grid.impulse(this.player.x, this.player.y, 22, 320);
+        spark(this.parts, this.player.x, this.player.y, '#ff5ce0', 28, 520, 0.55, 2.8);
+        break;
+      }
+      case 'vortex': {
+        // Slow seed that blooms into a gravity well.
+        const seed = this.mkBullet(px, py, ax * 280 * spd, ay * 280 * spd, w.dmg, 9, '#6b5cff', 99, 0.55, 'vortex');
+        seed.homing = false;
+        this.bullets.push(seed);
+        this.ammo.vortex--;
+        SFX.singularity();
+        this.shake = Math.max(this.shake, 6);
+        ringFx(this.rings, px, py, '#6b5cff', 12, 90, 0.35);
+        break;
+      }
+      case 'helix': {
+        this.helixSpin += 0.55;
+        const base = Math.atan2(ay, ax);
+        for (const side of [-1, 1] as const) {
+          const twist = this.helixSpin * side;
+          const ox = Math.cos(base + Math.PI / 2) * Math.cos(twist) * 16 * side;
+          const oy = Math.sin(base + Math.PI / 2) * Math.cos(twist) * 16 * side;
+          const a = base + Math.sin(twist) * 0.55 * side;
+          const b = this.mkBullet(
+            px + ox,
+            py + oy,
+            Math.cos(a) * 980 * spd,
+            Math.sin(a) * 980 * spd,
+            w.dmg,
+            2.8,
+            side > 0 ? '#3dffc8' : '#9effe8',
+            1,
+            0.85,
+            'helix',
+          );
+          this.bullets.push(b);
+        }
+        this.ammo.helix--;
+        SFX.swarm();
+        break;
+      }
     }
   }
 
@@ -761,6 +840,18 @@ export class Game {
       e.pulse = 0;
     }
     if (type === 'splitter') e.gen = 0;
+    if (type === 'courier') {
+      // Random cardinal lane — position is already in-bounds.
+      if (Math.random() < 0.5) {
+        e.vx = (Math.random() < 0.5 ? 1 : -1) * e.spd;
+        e.vy = 0;
+      } else {
+        e.vx = 0;
+        e.vy = (Math.random() < 0.5 ? 1 : -1) * e.spd;
+      }
+      e.spin = 0;
+      e.ang = Math.atan2(e.vy, e.vx);
+    }
     this.enemies.push(e);
     ringFx(this.rings, x, y, t.col, t.r * 3.4, t.r * 0.6, 0.5);
     return e;
@@ -773,6 +864,44 @@ export class Game {
       if (len(x - this.player.x, y - this.player.y) > 230) return [x, y];
     }
     return [rnd(this.W - 90, 90), rnd(this.H - 90, 90)];
+  }
+
+  /**
+   * In-bounds spawn with a bias toward edges/corners so entries feel varied,
+   * without ever appearing outside the arena.
+   */
+  edgeSpawnPoint(): [number, number] {
+    const inset = 48;
+    const band = Math.min(140, Math.min(this.W, this.H) * 0.22);
+    for (let attempt = 0; attempt < 28; attempt++) {
+      const side = (Math.random() * 4) | 0;
+      let x: number;
+      let y: number;
+      if (side === 0) {
+        // top band
+        x = rnd(this.W - inset, inset);
+        y = rnd(inset + band, inset);
+      } else if (side === 1) {
+        // bottom band
+        x = rnd(this.W - inset, inset);
+        y = rnd(this.H - inset, this.H - inset - band);
+      } else if (side === 2) {
+        // left band
+        x = rnd(inset + band, inset);
+        y = rnd(this.H - inset, inset);
+      } else {
+        // right band
+        x = rnd(this.W - inset, this.W - inset - band);
+        y = rnd(this.H - inset, inset);
+      }
+      // Occasional deeper inward jitter so it's not a rigid perimeter ring.
+      if (Math.random() < 0.35) {
+        x = clamp(x + rnd(90, -90), inset, this.W - inset);
+        y = clamp(y + rnd(90, -90), inset, this.H - inset);
+      }
+      if (len(x - this.player.x, y - this.player.y) > 220) return [x, y];
+    }
+    return this.safeSpawnPoint();
   }
 
   damage(e: Enemy, amount: number): void {
@@ -824,15 +953,15 @@ export class Game {
       SFX.pop(this.hitChain);
     }
 
-    if (award && e.type === 'splitter' && (e.gen || 0) < 2) {
-      const n = e.gen === 0 ? 3 : 2;
-      for (let i = 0; i < n; i++) {
+    if (award && e.type === 'splitter' && (e.gen || 0) < 1) {
+      // One generation only — two smaller pieces, not a cascade.
+      for (let i = 0; i < 2; i++) {
         const a = rnd(TAU);
         const c = this.spawnEnemy('splitter', e.x + Math.cos(a) * 22, e.y + Math.sin(a) * 22);
-        c.gen = (e.gen || 0) + 1;
-        c.r = ETYPE.splitter.r / (1 + c.gen);
-        c.hp = c.maxhp = Math.max(1, 4 - c.gen * 2);
-        c.spd = ETYPE.splitter.spd * (1 + c.gen * 0.45);
+        c.gen = 1;
+        c.r = ETYPE.splitter.r / 2;
+        c.hp = c.maxhp = 1;
+        c.spd = ETYPE.splitter.spd * 1.35;
         c.birth = 0.18;
       }
     }
@@ -871,9 +1000,20 @@ export class Game {
     // One pickup on screen at a time — more than that gets noisy.
     if (this.drops.length > 0) return;
     let key: WeaponKey | PowerKey;
-    if (kind === 'weapon') key = pick(['scatter', 'lance', 'swarm', 'arc', 'rail'] as const);
+    if (kind === 'weapon')
+      key = pick(['scatter', 'lance', 'swarm', 'arc', 'rail', 'nova', 'vortex', 'helix'] as const);
     else {
-      const pool: PowerKey[] = ['shield', 'overdrive', 'timewarp', 'magnet', 'drones', 'bomb'];
+      const pool: PowerKey[] = [
+        'shield',
+        'overdrive',
+        'timewarp',
+        'magnet',
+        'drones',
+        'bomb',
+        'mirror',
+        'razor',
+        'ghost',
+      ];
       if (this.lives < 4 && Math.random() < 0.12) {
         pool.push('life', 'life');
       }
@@ -919,29 +1059,27 @@ export class Game {
     if (this.spawnT <= 0 && this.enemies.length < MAX_ENEMIES) {
       this.spawnT = clamp(2.0 - this.elapsed / 70, 0.38, 2.0) * rnd(1.25, 0.75);
       const unlocked: EnemyType[] = ['drifter', 'seeker'];
+      if (this.elapsed > 14) unlocked.push('courier');
       if (this.elapsed > 18) unlocked.push('weaver');
       if (this.elapsed > 36) unlocked.push('splitter');
       if (this.elapsed > 58) unlocked.push('sentry');
       if (this.elapsed > 80) unlocked.push('serpent');
       if (this.elapsed > 104) unlocked.push('bulwark');
       const type = pick(unlocked);
-      const group = clamp(Math.round(rnd(diff * 1.4, 1)), 1, 7);
-      if (Math.random() < 0.22) {
-        const [cx, cy] = this.safeSpawnPoint();
-        const rr = 60 + group * 7;
+      const group = clamp(Math.round(rnd(diff * 1.2, 1)), 1, 5);
+      // Rare loose cluster — otherwise each ship gets its own randomised in-bounds spot.
+      if (Math.random() < 0.14 && type !== 'courier') {
+        const [cx, cy] = this.edgeSpawnPoint();
         for (let i = 0; i < group; i++) {
           if (this.enemies.length >= MAX_ENEMIES) break;
-          const a = (i / group) * TAU;
-          this.spawnEnemy(
-            type,
-            clamp(cx + Math.cos(a) * rr, 40, this.W - 40),
-            clamp(cy + Math.sin(a) * rr, 40, this.H - 40),
-          );
+          const x = clamp(cx + rnd(55, -55), 48, this.W - 48);
+          const y = clamp(cy + rnd(55, -55), 48, this.H - 48);
+          this.spawnEnemy(type, x, y);
         }
       } else {
         for (let i = 0; i < group; i++) {
           if (this.enemies.length >= MAX_ENEMIES) break;
-          const [x, y] = this.safeSpawnPoint();
+          const [x, y] = this.edgeSpawnPoint();
           this.spawnEnemy(type, x, y);
         }
       }
@@ -950,7 +1088,7 @@ export class Game {
         Math.random() < 0.09 &&
         this.enemies.filter((e) => e.type === 'singular').length < 2
       ) {
-        const [x, y] = this.safeSpawnPoint();
+        const [x, y] = this.edgeSpawnPoint();
         this.spawnEnemy('singular', x, y);
         this.toast('SINGULARITY', 'it eats the grid', 1100, '#ff2d55');
         SFX.singularity();
@@ -1020,6 +1158,16 @@ export class Game {
         break;
       case 'drones':
         this.buffs.drones = 16;
+        break;
+      case 'mirror':
+        this.buffs.mirror = 9;
+        break;
+      case 'razor':
+        this.buffs.razor = 11;
+        break;
+      case 'ghost':
+        this.buffs.ghost = 7;
+        this.player.invuln = Math.max(this.player.invuln, 7);
         break;
       case 'bomb':
         this.bombs = Math.min(this.bombs + 1, 5);
@@ -1231,6 +1379,8 @@ export class Game {
 
     this.updateBullets(dt);
     this.updateEBullets(dt, ets);
+    this.updateVortices(dt, ets);
+    this.updateAuraPowers(dt, ets);
     this.updateEnemies(dt, ets);
     this.updateGems(dt);
     this.updateDrops(dt);
@@ -1316,6 +1466,7 @@ export class Game {
         }
       }
       if (b.life <= 0 || b.x < -40 || b.x > this.W + 40 || b.y < -40 || b.y > this.H + 40) {
+        if (b.src === 'vortex') this.spawnVortexAt(b.x, b.y);
         this.bullets.splice(i, 1);
         continue;
       }
@@ -1345,6 +1496,12 @@ export class Game {
             continue;
           }
         } else if (hit === 'boss' || hit === 'decoy') {
+          if (b.src === 'vortex') {
+            this.spawnVortexAt(b.x, b.y);
+            spark(this.parts, b.x, b.y, '#6b5cff', 10, 220, 0.4, 2.4);
+            this.bullets.splice(i, 1);
+            continue;
+          }
           b.pierce--;
           if (b.pierce <= 0) {
             spark(this.parts, b.x, b.y, b.col, 4, 180, 0.25, 2);
@@ -1379,6 +1536,12 @@ export class Game {
         this.damage(e, b.dmg);
         e.vx += b.vx * 0.045;
         e.vy += b.vy * 0.045;
+        if (b.src === 'vortex') {
+          this.spawnVortexAt(b.x, b.y);
+          spark(this.parts, b.x, b.y, '#6b5cff', 10, 220, 0.4, 2.4);
+          this.bullets.splice(i, 1);
+          break;
+        }
         b.pierce--;
         if (b.pierce <= 0) {
           spark(this.parts, b.x, b.y, b.col, 4, 180, 0.25, 2);
@@ -1390,6 +1553,7 @@ export class Game {
   }
 
   private updateEBullets(dt: number, ets: number): void {
+    const mirror = this.buffs.mirror > 0;
     for (let i = this.ebullets.length - 1; i >= 0; i--) {
       const b = this.ebullets[i];
       if (!b) break;
@@ -1399,6 +1563,21 @@ export class Game {
       if (b.life <= 0 || b.x < -30 || b.x > this.W + 30 || b.y < -30 || b.y > this.H + 30) {
         this.ebullets.splice(i, 1);
         continue;
+      }
+      if (mirror) {
+        const dx = b.x - this.player.x;
+        const dy = b.y - this.player.y;
+        if (dx * dx + dy * dy < 95 * 95) {
+          // Flip hostile fire into a player shot.
+          const [nx, ny] = norm(-b.vx, -b.vy);
+          this.bullets.push(
+            this.mkBullet(b.x, b.y, nx * 980, ny * 980, 2.2, 3.5, '#e8f0ff', 2, 1.2, 'pulse'),
+          );
+          spark(this.parts, b.x, b.y, '#e8f0ff', 8, 220, 0.3, 2);
+          SFX.shield();
+          this.ebullets.splice(i, 1);
+          continue;
+        }
       }
       if (this.hitPlayer(b.x, b.y, b.r)) {
         this.ebullets.splice(i, 1);
@@ -1414,6 +1593,178 @@ export class Game {
           break;
         }
       }
+    }
+  }
+
+  private spawnVortexAt(x: number, y: number): void {
+    if (this.vortices.length >= 3) this.vortices.shift();
+    this.vortices.push({
+      x: clamp(x, 40, this.W - 40),
+      y: clamp(y, 40, this.H - 40),
+      life: 3.2,
+      max: 3.2,
+      r: 150,
+      pulse: 0,
+    });
+    ringFx(this.rings, x, y, '#6b5cff', 20, 180, 0.55);
+    this.grid.impulse(x, y, -18, 220);
+  }
+
+  private updateVortices(dt: number, ets: number): void {
+    for (let i = this.vortices.length - 1; i >= 0; i--) {
+      const v = this.vortices[i]!;
+      v.life -= dt;
+      v.pulse += dt;
+      if (v.life <= 0) {
+        ringFx(this.rings, v.x, v.y, '#6b5cff', v.r * 0.4, v.r * 1.4, 0.35);
+        this.vortices.splice(i, 1);
+        continue;
+      }
+      const fade = Math.min(1, v.life / 0.55);
+      const R = v.r * (0.85 + Math.sin(v.pulse * 5) * 0.08);
+      this.grid.impulse(v.x, v.y, -(1.8 + fade), R * 1.15);
+      if (Math.random() < 0.55) {
+        const a = rnd(TAU);
+        const rr = R * rnd(1, 0.2);
+        pushParticle(this.parts, {
+          x: v.x + Math.cos(a) * rr,
+          y: v.y + Math.sin(a) * rr,
+          vx: -Math.cos(a) * rr * 1.8,
+          vy: -Math.sin(a) * rr * 1.8,
+          life: 0.45,
+          max: 0.45,
+          col: Math.random() < 0.5 ? '#6b5cff' : '#c4b8ff',
+          size: 1.8,
+          drag: 0.98,
+        });
+      }
+      for (const e of this.enemies) {
+        if (e.dead || e.birth > 0) continue;
+        const dx = v.x - e.x;
+        const dy = v.y - e.y;
+        const dd = Math.max(18, len(dx, dy));
+        if (dd < R) {
+          const pull = ((1 - dd / R) * 980 * ets) / dd;
+          e.vx += dx * pull * dt;
+          e.vy += dy * pull * dt;
+          this.damage(e, WEAPONS.vortex.dmg * dt * (0.55 + (1 - dd / R)));
+        }
+      }
+      if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+        const b = this.bosses.boss;
+        const dx = v.x - b.x;
+        const dy = v.y - b.y;
+        const dd = Math.max(28, len(dx, dy));
+        if (dd < R + b.r * 0.35) {
+          const pull = ((1 - dd / (R + b.r)) * 420 * ets) / dd;
+          b.vx += dx * pull * dt;
+          b.vy += dy * pull * dt;
+          this.bosses.tryHit(
+            this.bossHost(),
+            b.x,
+            b.y,
+            10,
+            WEAPONS.vortex.dmg * dt * 0.85,
+            'vortex',
+            { ang: Math.atan2(-dy, -dx) },
+          );
+        }
+      }
+    }
+  }
+
+  private updateAuraPowers(dt: number, ets: number): void {
+    if (this.buffs.ghost > 0) {
+      this.player.invuln = Math.max(this.player.invuln, 0.12);
+      if (Math.random() < 0.65) {
+        pushParticle(this.parts, {
+          x: this.player.x + rnd(10, -10),
+          y: this.player.y + rnd(10, -10),
+          vx: -this.player.vx * 0.2 + rnd(30, -30),
+          vy: -this.player.vy * 0.2 + rnd(30, -30),
+          life: 0.55,
+          max: 0.55,
+          col: '#b8a0ff',
+          size: 2.4,
+          drag: 0.92,
+        });
+      }
+      // Ghost wake shreds nearby enemies.
+      for (const e of this.enemies) {
+        if (e.dead || e.birth > 0) continue;
+        const dx = e.x - this.player.x;
+        const dy = e.y - this.player.y;
+        if (dx * dx + dy * dy < (e.r + 34) ** 2) {
+          this.damage(e, 7 * dt);
+        }
+      }
+      if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+        const b = this.bosses.boss;
+        const dx = b.x - this.player.x;
+        const dy = b.y - this.player.y;
+        if (dx * dx + dy * dy < (b.r + 30) ** 2) {
+          this.bosses.tryHit(this.bossHost(), b.x, b.y, 12, 9 * dt, 'ghost', {
+            ang: Math.atan2(dy, dx),
+          });
+        }
+      }
+    }
+
+    if (this.buffs.razor > 0) {
+      this.razorAng += dt * 7.5;
+      const blades = 3;
+      const orbit = 54;
+      for (let i = 0; i < blades; i++) {
+        const a = this.razorAng + (i / blades) * TAU;
+        const bx = this.player.x + Math.cos(a) * orbit;
+        const by = this.player.y + Math.sin(a) * orbit;
+        for (const e of this.enemies) {
+          if (e.dead || e.birth > 0) continue;
+          const dx = e.x - bx;
+          const dy = e.y - by;
+          if (dx * dx + dy * dy < (e.r + 14) ** 2) {
+            this.damage(e, 14 * dt * ets);
+            e.vx += Math.cos(a + Math.PI / 2) * 40 * dt;
+            e.vy += Math.sin(a + Math.PI / 2) * 40 * dt;
+          }
+        }
+        if (this.mode === 'boss' && this.bosses.boss && !this.bosses.boss.dead) {
+          const boss = this.bosses.boss;
+          const dx = boss.x - bx;
+          const dy = boss.y - by;
+          if (dx * dx + dy * dy < (boss.r + 12) ** 2) {
+            this.bosses.tryHit(this.bossHost(), bx, by, 10, 11 * dt, 'razor', { ang: a });
+          }
+        }
+        if (Math.random() < 0.25) {
+          pushParticle(this.parts, {
+            x: bx,
+            y: by,
+            vx: Math.cos(a + 1.2) * 80,
+            vy: Math.sin(a + 1.2) * 80,
+            life: 0.2,
+            max: 0.2,
+            col: '#ff6b4a',
+            size: 1.5,
+            drag: 0.9,
+          });
+        }
+      }
+    }
+
+    if (this.buffs.mirror > 0 && Math.random() < 0.2) {
+      const a = rnd(TAU);
+      pushParticle(this.parts, {
+        x: this.player.x + Math.cos(a) * 70,
+        y: this.player.y + Math.sin(a) * 70,
+        vx: Math.cos(a) * 40,
+        vy: Math.sin(a) * 40,
+        life: 0.25,
+        max: 0.25,
+        col: '#e8f0ff',
+        size: 1.4,
+        drag: 0.9,
+      });
     }
   }
 
@@ -1465,6 +1816,10 @@ export class Game {
         case 'splitter': {
           e.vx += tx * e.spd * 2.2 * dt * ets;
           e.vy += ty * e.spd * 2.2 * dt * ets;
+          break;
+        }
+        case 'courier': {
+          // Constant lane velocity — set at spawn; no seeking.
           break;
         }
         case 'serpent': {
@@ -1545,32 +1900,64 @@ export class Game {
           break;
         }
       }
-      const es = len(e.vx, e.vy);
-      const cap = e.spd * 1.9;
-      if (es > cap) {
-        e.vx = (e.vx / es) * cap;
-        e.vy = (e.vy / es) * cap;
-      }
-      e.vx *= Math.pow(0.3, dt);
-      e.vy *= Math.pow(0.3, dt);
-      e.x += e.vx * dt * ets;
-      e.y += e.vy * dt * ets;
+      if (e.type === 'courier') {
+        // Hold lane speed; reverse on arena edges.
+        const sp = e.spd;
+        if (e.vx !== 0) {
+          e.vx = Math.sign(e.vx) * sp;
+          e.vy = 0;
+        } else {
+          e.vy = Math.sign(e.vy || 1) * sp;
+          e.vx = 0;
+        }
+        e.x += e.vx * dt * ets;
+        e.y += e.vy * dt * ets;
+        if (e.vx !== 0) {
+          if (e.x < e.r) {
+            e.x = e.r;
+            e.vx = sp;
+          } else if (e.x > this.W - e.r) {
+            e.x = this.W - e.r;
+            e.vx = -sp;
+          }
+        } else {
+          if (e.y < e.r) {
+            e.y = e.r;
+            e.vy = sp;
+          } else if (e.y > this.H - e.r) {
+            e.y = this.H - e.r;
+            e.vy = -sp;
+          }
+        }
+        e.ang = Math.atan2(e.vy, e.vx);
+      } else {
+        const es = len(e.vx, e.vy);
+        const cap = e.spd * 1.9;
+        if (es > cap) {
+          e.vx = (e.vx / es) * cap;
+          e.vy = (e.vy / es) * cap;
+        }
+        e.vx *= Math.pow(0.3, dt);
+        e.vy *= Math.pow(0.3, dt);
+        e.x += e.vx * dt * ets;
+        e.y += e.vy * dt * ets;
 
-      if (e.x < e.r) {
-        e.x = e.r;
-        e.vx = Math.abs(e.vx);
-      }
-      if (e.x > this.W - e.r) {
-        e.x = this.W - e.r;
-        e.vx = -Math.abs(e.vx);
-      }
-      if (e.y < e.r) {
-        e.y = e.r;
-        e.vy = Math.abs(e.vy);
-      }
-      if (e.y > this.H - e.r) {
-        e.y = this.H - e.r;
-        e.vy = -Math.abs(e.vy);
+        if (e.x < e.r) {
+          e.x = e.r;
+          e.vx = Math.abs(e.vx);
+        }
+        if (e.x > this.W - e.r) {
+          e.x = this.W - e.r;
+          e.vx = -Math.abs(e.vx);
+        }
+        if (e.y < e.r) {
+          e.y = e.r;
+          e.vy = Math.abs(e.vy);
+        }
+        if (e.y > this.H - e.r) {
+          e.y = this.H - e.r;
+          e.vy = -Math.abs(e.vy);
+        }
       }
       this.grid.impulse(e.x, e.y, e.type === 'singular' ? 0 : -0.22, e.r * 3.6);
 
@@ -2056,6 +2443,23 @@ export class Game {
         this.stroke2(col, 1.6);
         break;
       }
+      case 'courier': {
+        const a = Math.atan2(e.vy, e.vx) || e.ang;
+        const tip = e.r * 1.65;
+        const wing = e.r * 1.05;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * tip, e.y + Math.sin(a) * tip);
+        ctx.lineTo(e.x + Math.cos(a + 2.35) * wing, e.y + Math.sin(a + 2.35) * wing);
+        ctx.lineTo(e.x + Math.cos(a + Math.PI) * e.r * 0.55, e.y + Math.sin(a + Math.PI) * e.r * 0.55);
+        ctx.lineTo(e.x + Math.cos(a - 2.35) * wing, e.y + Math.sin(a - 2.35) * wing);
+        ctx.closePath();
+        this.stroke2(col, 2.2);
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * tip * 0.35, e.y + Math.sin(a) * tip * 0.35);
+        ctx.lineTo(e.x + Math.cos(a + Math.PI) * e.r * 0.35, e.y + Math.sin(a + Math.PI) * e.r * 0.35);
+        this.stroke2(col, 1.3);
+        break;
+      }
       case 'serpent': {
         ctx.beginPath();
         ctx.moveTo(e.x, e.y);
@@ -2203,8 +2607,44 @@ export class Game {
   private drawPlayer(): void {
     const ctx = this.ctx;
     const { player } = this;
-    if (player.invuln > 0 && Math.floor(player.invuln * 12) % 2 === 0) return;
+    const ghosted = this.buffs.ghost > 0;
+    if (!ghosted && player.invuln > 0 && Math.floor(player.invuln * 12) % 2 === 0) return;
+
+    if (this.buffs.mirror > 0) {
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, 78 + Math.sin(this.gameT * 6) * 3, 0, TAU);
+      ctx.strokeStyle = '#e8f0ff';
+      ctx.globalAlpha = 0.22 + Math.sin(this.gameT * 9) * 0.08;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    if (this.buffs.razor > 0) {
+      const blades = 3;
+      const orbit = 54;
+      for (let i = 0; i < blades; i++) {
+        const a = this.razorAng + (i / blades) * TAU;
+        const bx = player.x + Math.cos(a) * orbit;
+        const by = player.y + Math.sin(a) * orbit;
+        ctx.beginPath();
+        ctx.moveTo(bx + Math.cos(a) * 12, by + Math.sin(a) * 12);
+        ctx.lineTo(bx + Math.cos(a + 2.3) * 8, by + Math.sin(a + 2.3) * 8);
+        ctx.lineTo(bx + Math.cos(a - 2.3) * 8, by + Math.sin(a - 2.3) * 8);
+        ctx.closePath();
+        this.stroke2('#ff6b4a', 2);
+      }
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, orbit, 0, TAU);
+      ctx.strokeStyle = '#ff6b4a';
+      ctx.globalAlpha = 0.18;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     ctx.save();
+    if (ghosted) ctx.globalAlpha = 0.42 + Math.sin(this.gameT * 10) * 0.12;
     ctx.translate(player.x, player.y);
     ctx.rotate(player.ang);
     ctx.beginPath();
@@ -2213,13 +2653,13 @@ export class Game {
     ctx.lineTo(-4, 0);
     ctx.lineTo(-9, -11);
     ctx.closePath();
-    this.stroke2('#eaf6ff', 2.2);
+    this.stroke2(ghosted ? '#b8a0ff' : '#eaf6ff', 2.2);
     ctx.beginPath();
     ctx.moveTo(9, 0);
     ctx.lineTo(-3, 5);
     ctx.lineTo(-3, -5);
     ctx.closePath();
-    this.stroke2('#63f7ff', 1.6);
+    this.stroke2(ghosted ? '#d5c6ff' : '#63f7ff', 1.6);
     if (player.thrust > 0.1) {
       ctx.beginPath();
       ctx.moveTo(-6, 4);
@@ -2260,6 +2700,46 @@ export class Game {
       ctx.strokeStyle = '#b8ff3d';
       ctx.globalAlpha = 0.2;
       ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  private drawVortices(): void {
+    const ctx = this.ctx;
+    for (const v of this.vortices) {
+      const t = 1 - v.life / v.max;
+      const R = v.r * (0.85 + Math.sin(v.pulse * 5) * 0.08);
+      const a = clamp(v.life / 0.4, 0, 1) * (1 - t * 0.35);
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, R, 0, TAU);
+      ctx.strokeStyle = '#6b5cff';
+      ctx.globalAlpha = 0.22 * a;
+      ctx.lineWidth = 10;
+      ctx.stroke();
+      ctx.globalAlpha = 0.55 * a;
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, R * 0.35 + Math.sin(v.pulse * 8) * 4, 0, TAU);
+      ctx.strokeStyle = '#c4b8ff';
+      ctx.globalAlpha = 0.7 * a;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Spiral arms
+      ctx.beginPath();
+      for (let i = 0; i <= 28; i++) {
+        const f = i / 28;
+        const ang = v.pulse * 3.2 + f * TAU * 1.6;
+        const rr = R * (0.15 + f * 0.85);
+        const x = v.x + Math.cos(ang) * rr;
+        const y = v.y + Math.sin(ang) * rr;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = '#8f7dff';
+      ctx.globalAlpha = 0.4 * a;
+      ctx.lineWidth = 1.6;
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
@@ -2400,6 +2880,7 @@ export class Game {
     }
     for (const e of this.enemies) this.drawEnemy(e);
     if (this.mode === 'boss') this.bosses.draw(ctx, this.gameT);
+    this.drawVortices();
     for (const b of this.bullets) {
       if (b.rail) {
         this.drawRailLaser(b.px, b.py, b.x, b.y, 1);
