@@ -27,3 +27,4 @@
 - Death-clear no longer awards score/kills/gems for enemies wiped when the player is hit.
 - Locked down leaderboard: session tokens + Edge Function heartbeats; revoked public score inserts.
 - Callsigns unique per IP (same IP can reuse); leaderboard shows full scrollable list.
+- Deployed the boss-aware leaderboard Edge Function (the live one was still survival-only, so every boss submit was rejected) and ignored supabase/.temp.
