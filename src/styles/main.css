@@ -306,8 +306,35 @@ canvas.screen-confetti {
   gap: 1px;
   background: rgba(255, 255, 255, 0.09);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  margin-bottom: 36px;
+  margin-bottom: 28px;
   text-align: left;
+}
+.howto-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: 24px 12px;
+  background: rgba(3, 4, 10, 0.72);
+  backdrop-filter: blur(4px);
+  overflow: auto;
+  pointer-events: auto;
+}
+.howto-modal.hide {
+  display: none;
+}
+.howto-card {
+  width: min(720px, 94vw);
+  background: #070a18;
+  border: 1px solid rgba(99, 247, 255, 0.28);
+  padding: 28px 22px 26px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+.howto-title {
+  font-size: clamp(28px, 5.5vw, 48px);
+  margin-bottom: 22px;
+  letter-spacing: 0.12em;
 }
 .key {
   background: #070a18;
@@ -866,6 +893,9 @@ canvas.screen-confetti {
   .keys {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: 18px;
+  }
+  .howto-card {
+    padding: 22px 14px 20px;
   }
   .tag {
     margin-bottom: 18px;

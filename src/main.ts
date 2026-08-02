@@ -51,6 +51,7 @@ game = new Game(canvas, {
     void overlays.victoryPanel(stats);
   },
   onModeSelect: () => {
+    if (overlays.closeHowtoIfOpen()) return;
     if (overlays.selectingMode) {
       overlays.selectingMode = false;
       game.startRun('survival');

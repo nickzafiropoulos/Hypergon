@@ -11,6 +11,7 @@ import {
   SHIP_MAGNET,
   WEAPONS,
   WORDER,
+  applyMobileFxCaps,
   type EnemyType,
   type PowerKey,
   type WeaponKey,
@@ -79,8 +80,11 @@ export class Game {
   H = 0;
   DPR = 1;
   bloomOn = true;
+  glowOn = true;
   isMobile = false;
   reducedMotion = false;
+  /** Soft radial disc — cheap stand-in for shadowBlur on mobile. */
+  private glowSprite: HTMLCanvasElement | null = null;
 
   grid = new WarpGrid();
   input!: InputSystem;
@@ -188,7 +192,13 @@ export class Game {
     this.isMobile =
       matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
     this.bloomOn = !this.isMobile && !this.reducedMotion;
+    this.glowOn = !this.isMobile && !this.reducedMotion;
+    this.bosses.glowOn = this.glowOn;
     this.grid.reduced = this.isMobile || this.reducedMotion;
+    if (this.isMobile) applyMobileFxCaps();
+    if (this.isMobile && !this.reducedMotion) {
+      this.glowSprite = this.makeGlowSprite(64);
+    }
 
     this.input = new InputSystem(canvas, {
       onPause: () => this.togglePause(),
@@ -1343,7 +1353,9 @@ export class Game {
       const cols = od
         ? (['#ffb02e', '#ffe08a', '#ffffff', '#ff7a3d'] as const)
         : (['#ffffff', '#7cf9ff', '#63f7ff', '#eaf6ff'] as const);
-      const n = 3 + ((this.player.thrust * 5 + Math.random() * 2) | 0);
+      const n = this.isMobile
+        ? 1 + ((this.player.thrust * 2) | 0)
+        : 3 + ((this.player.thrust * 5 + Math.random() * 2) | 0);
       for (let i = 0; i < n; i++) {
         const side = rnd(1.1, -1.1);
         const back = 8 + rnd(5);
@@ -1516,7 +1528,7 @@ export class Game {
           b.vx *= 1.012;
           b.vy *= 1.012;
         }
-        if (Math.random() < 0.4) {
+        if (Math.random() < (this.isMobile ? 0.12 : 0.4)) {
           pushParticle(this.parts, {
             x: b.x,
             y: b.y,
@@ -1535,7 +1547,7 @@ export class Game {
       b.life -= dt;
       if (b.rail) {
         this.grid.impulse(b.x, b.y, 1.4, 120);
-        if (Math.random() < 0.5) {
+        if (Math.random() < (this.isMobile ? 0.15 : 0.5)) {
           pushParticle(this.parts, {
             x: b.x,
             y: b.y,
@@ -1717,7 +1729,7 @@ export class Game {
       const fade = Math.min(1, v.life / 0.55);
       const R = v.r * (0.85 + Math.sin(v.pulse * 5) * 0.08);
       this.grid.impulse(v.x, v.y, -(1.8 + fade), R * 1.15);
-      if (Math.random() < 0.55) {
+      if (Math.random() < (this.isMobile ? 0.18 : 0.55)) {
         const a = rnd(TAU);
         const rr = R * rnd(1, 0.2);
         pushParticle(this.parts, {
@@ -1770,7 +1782,7 @@ export class Game {
   private updateAuraPowers(dt: number, ets: number): void {
     if (this.buffs.ghost > 0) {
       this.player.invuln = Math.max(this.player.invuln, 0.12);
-      if (Math.random() < 0.65) {
+      if (Math.random() < (this.isMobile ? 0.22 : 0.65)) {
         pushParticle(this.parts, {
           x: this.player.x + rnd(10, -10),
           y: this.player.y + rnd(10, -10),
@@ -1830,7 +1842,7 @@ export class Game {
             this.bosses.tryHit(this.bossHost(), bx, by, 10, 11 * dt, 'razor', { ang: a });
           }
         }
-        if (Math.random() < 0.25) {
+        if (Math.random() < (this.isMobile ? 0.08 : 0.25)) {
           pushParticle(this.parts, {
             x: bx,
             y: by,
@@ -1846,7 +1858,7 @@ export class Game {
       }
     }
 
-    if (this.buffs.mirror > 0 && Math.random() < 0.2) {
+    if (this.buffs.mirror > 0 && Math.random() < (this.isMobile ? 0.08 : 0.2)) {
       const a = rnd(TAU);
       pushParticle(this.parts, {
         x: this.player.x + Math.cos(a) * 70,
@@ -2314,6 +2326,7 @@ export class Game {
   // ---- drawing ----
   private drawScorePops(): void {
     const ctx = this.ctx;
+    const cheapGlow = this.isMobile && !this.reducedMotion;
     for (const s of this.scorePops) {
       const t = clamp(s.life / s.max, 0, 1);
       const fade = t > 0.25 ? 1 : t / 0.25;
@@ -2336,22 +2349,48 @@ export class Game {
         g.addColorStop(clamp(0.35 + shift * 0.25, 0.05, 0.95), '#ff3fa4');
         g.addColorStop(1, '#ffb02e');
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2 + s.scale * 0.35;
-        ctx.shadowColor = s.text ? '#ffb02e' : '#ff3fa4';
-        ctx.shadowBlur = this.reducedMotion ? 0 : 16;
-        ctx.strokeText(label, px, py);
-        ctx.shadowBlur = this.reducedMotion ? 0 : 12;
-        ctx.shadowColor = '#63f7ff';
+        if (this.glowOn) {
+          ctx.lineWidth = 2 + s.scale * 0.35;
+          ctx.shadowColor = s.text ? '#ffb02e' : '#ff3fa4';
+          ctx.shadowBlur = 16;
+          ctx.strokeText(label, px, py);
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = '#63f7ff';
+        } else if (cheapGlow) {
+          // Wider soft stroke instead of shadowBlur
+          ctx.lineWidth = 4.5 + s.scale * 0.6;
+          ctx.globalAlpha = fade * 0.35;
+          ctx.strokeText(label, px, py);
+          ctx.globalAlpha = fade * 0.95;
+          ctx.lineWidth = 2 + s.scale * 0.35;
+          ctx.strokeText(label, px, py);
+        } else {
+          ctx.lineWidth = 2 + s.scale * 0.35;
+          ctx.strokeText(label, px, py);
+        }
         ctx.fillStyle = g;
         ctx.fillText(label, px, py);
+        if (this.glowOn) ctx.shadowBlur = 0;
       } else {
         ctx.fillStyle = '#e8fbff';
         ctx.strokeStyle = s.col;
-        ctx.lineWidth = 2.2 + s.scale * 0.35;
-        ctx.shadowColor = s.col;
-        ctx.shadowBlur = this.reducedMotion ? 0 : 8 + s.scale * 2;
-        ctx.strokeText(label, px, py);
-        ctx.shadowBlur = 0;
+        if (this.glowOn) {
+          ctx.lineWidth = 2.2 + s.scale * 0.35;
+          ctx.shadowColor = s.col;
+          ctx.shadowBlur = 8 + s.scale * 2;
+          ctx.strokeText(label, px, py);
+          ctx.shadowBlur = 0;
+        } else if (cheapGlow) {
+          ctx.lineWidth = 4 + s.scale * 0.7;
+          ctx.globalAlpha = fade * 0.4;
+          ctx.strokeText(label, px, py);
+          ctx.globalAlpha = fade * 0.95;
+          ctx.lineWidth = 2.2 + s.scale * 0.35;
+          ctx.strokeText(label, px, py);
+        } else {
+          ctx.lineWidth = 2.2 + s.scale * 0.35;
+          ctx.strokeText(label, px, py);
+        }
         ctx.fillText(label, px, py);
       }
       ctx.restore();
@@ -2384,16 +2423,33 @@ export class Game {
     ctx.restore();
   }
 
+  /** Soft outer stroke halo — widened on mobile to stand in for bloom/shadowBlur. */
   private stroke2(col: string, w: number, a = 1): void {
     const ctx = this.ctx;
+    const cheap = this.isMobile && !this.reducedMotion;
     ctx.strokeStyle = col;
-    ctx.globalAlpha = 0.2 * a;
-    ctx.lineWidth = w * 3.4;
+    ctx.globalAlpha = (cheap ? 0.28 : 0.2) * a;
+    ctx.lineWidth = w * (cheap ? 4.8 : 3.4);
     ctx.stroke();
     ctx.globalAlpha = a;
     ctx.lineWidth = w;
     ctx.stroke();
     ctx.globalAlpha = 1;
+  }
+
+  /** One-shot radial disc used as a drawImage glow (no per-frame shadowBlur). */
+  private makeGlowSprite(size: number): HTMLCanvasElement {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = c.getContext('2d')!;
+    const mid = size * 0.5;
+    const grad = g.createRadialGradient(mid, mid, 0, mid, mid, mid);
+    grad.addColorStop(0, 'rgba(232,246,255,0.55)');
+    grad.addColorStop(0.35, 'rgba(99,247,255,0.28)');
+    grad.addColorStop(1, 'rgba(99,247,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    return c;
   }
 
   private polyPath(x: number, y: number, n: number, r: number, rot: number): void {
@@ -2474,9 +2530,14 @@ export class Game {
     ctx.strokeRect(lx - 8, ly - 12, tw + 16, 24);
 
     ctx.fillStyle = `rgba(232,255,255,${0.92 * fade})`;
-    ctx.shadowColor = 'rgba(99,247,255,0.55)';
-    ctx.shadowBlur = this.reducedMotion ? 0 : 8;
-    ctx.fillText(label, lx, ly);
+    if (this.glowOn) {
+      ctx.shadowColor = 'rgba(99,247,255,0.55)';
+      ctx.shadowBlur = 8;
+      ctx.fillText(label, lx, ly);
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.fillText(label, lx, ly);
+    }
     ctx.restore();
   }
 
@@ -2719,6 +2780,16 @@ export class Game {
     const ghosted = this.buffs.ghost > 0;
     if (!ghosted && player.invuln > 0 && Math.floor(player.invuln * 12) % 2 === 0) return;
 
+    // Mobile: pre-rendered glow sprite instead of shadowBlur / bloom
+    if (this.glowSprite && !ghosted) {
+      const sz = 56;
+      ctx.save();
+      ctx.globalAlpha = 0.55 + Math.sin(this.gameT * 4) * 0.08;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(this.glowSprite, player.x - sz * 0.5, player.y - sz * 0.5, sz, sz);
+      ctx.restore();
+    }
+
     if (this.buffs.mirror > 0) {
       ctx.beginPath();
       ctx.arc(player.x, player.y, 78 + Math.sin(this.gameT * 6) * 3, 0, TAU);
@@ -2940,7 +3011,7 @@ export class Game {
       this.adventure.draw(ctx, this.gameT, this.W, this.H);
     }
 
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalCompositeOperation = this.isMobile ? 'source-over' : 'lighter';
 
     for (const r of this.rings) {
       const t = 1 - r.life / r.max;

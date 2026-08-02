@@ -51,6 +51,8 @@ type Phase = 'intro' | 'fight' | 'intermission' | 'done';
 
 export class BossDirector {
   env = new EnvSystem();
+  /** Mirrors Game.glowOn — skip per-frame shadowBlur on mobile / reduced motion. */
+  glowOn = true;
   boss: BossRuntime | null = null;
   index = 0;
   cleared = 0;
@@ -1171,10 +1173,12 @@ export class BossDirector {
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.fillRect(x, y, w, h);
     ctx.fillStyle = b.flash > 0 ? '#ffffff' : b.col;
-    ctx.shadowColor = b.col;
-    ctx.shadowBlur = 12;
+    if (this.glowOn) {
+      ctx.shadowColor = b.col;
+      ctx.shadowBlur = 12;
+    }
     ctx.fillRect(x, y, w * frac, h);
-    ctx.shadowBlur = 0;
+    if (this.glowOn) ctx.shadowBlur = 0;
     ctx.fillStyle = '#eaf6ff';
     ctx.font = '600 11px "Chakra Petch", sans-serif';
     ctx.textAlign = 'center';
@@ -1259,10 +1263,13 @@ export class BossDirector {
       ctx.beginPath();
       ctx.arc(0, 0, b.r + 6, b.sa - 1.15, b.sa + 1.15);
       ctx.strokeStyle = '#ffb02e';
-      ctx.lineWidth = 5;
-      ctx.shadowColor = '#ffb02e';
-      ctx.shadowBlur = 10;
+      ctx.lineWidth = this.glowOn ? 5 : 6.5;
+      if (this.glowOn) {
+        ctx.shadowColor = '#ffb02e';
+        ctx.shadowBlur = 10;
+      }
       ctx.stroke();
+      if (this.glowOn) ctx.shadowBlur = 0;
       ctx.restore();
     }
   }
@@ -1357,9 +1364,11 @@ export class BossDirector {
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = flash ? '#ffffff' : col;
     ctx.fillStyle = flash ? 'rgba(255,255,255,0.18)' : col + '18';
-    ctx.lineWidth = 3.2;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = flash ? 22 : 12;
+    ctx.lineWidth = this.glowOn ? 3.2 : 4.2;
+    if (this.glowOn) {
+      ctx.shadowColor = col;
+      ctx.shadowBlur = flash ? 22 : 12;
+    }
     ctx.lineJoin = 'round';
   }
 
@@ -1995,9 +2004,11 @@ export class BossDirector {
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = flash ? '#ffffff' : col;
     ctx.fillStyle = flash ? 'rgba(255,255,255,0.2)' : col + '18';
-    ctx.lineWidth = 3;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = flash ? 20 : 10;
+    ctx.lineWidth = this.glowOn ? 3 : 4;
+    if (this.glowOn) {
+      ctx.shadowColor = col;
+      ctx.shadowBlur = flash ? 20 : 10;
+    }
     ctx.beginPath();
     for (let i = 0; i < sides; i++) {
       const a = (i / sides) * TAU - Math.PI / 2;
@@ -2009,6 +2020,7 @@ export class BossDirector {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    if (this.glowOn) ctx.shadowBlur = 0;
     ctx.restore();
   }
 

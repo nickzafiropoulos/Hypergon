@@ -110,9 +110,16 @@ export const GEM_LIFE = 4.5;
 export const GEM_FLASH = 0.7;
 
 export const MAX_ENEMIES = 90;
-export const MAX_PARTICLES = 1800;
-export const MAX_RINGS = 120;
+/** Mutable so mobile can clamp FX budgets without forking every spawn site. */
+export let MAX_PARTICLES = 1800;
+export let MAX_RINGS = 120;
 export const MAX_GEMS = 180;
+
+/** Tighten particle/ring ceilings on coarse-pointer devices. */
+export function applyMobileFxCaps(): void {
+  MAX_PARTICLES = 520;
+  MAX_RINGS = 40;
+}
 
 /** Ship pulls multiplier cores inward when they enter this radius. */
 export const SHIP_MAGNET = {

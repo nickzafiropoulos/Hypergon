@@ -128,6 +128,17 @@ function boardBlock(
       </div>`;
 }
 
+function howToPlayKeysHtml(): string {
+  return `<div class="keys">
+        <div class="key"><b>MOVE</b><span>Arrow keys &nbsp;/&nbsp; WASD &nbsp;/&nbsp; left stick</span></div>
+        <div class="key"><b>AIM &amp; FIRE</b><span>Mouse position + hold click &nbsp;/&nbsp; right stick. F locks auto-fire.</span></div>
+        <div class="key"><b>SHOCKWAVE</b><span>Space or right-click - clears the board</span></div>
+        <div class="key"><b>SWAP WEAPON</b><span>Q / E through anything you're carrying</span></div>
+        <div class="key"><b>PICKUPS</b><span>Hexagons are weapons. Stars are powers.</span></div>
+        <div class="key"><b>MULTIPLIER</b><span>Cyan cores raise it. Dying resets it.</span></div>
+      </div>`;
+}
+
 function focusBoardRow(): void {
   const scroll = document.querySelector('.board-scroll') as HTMLElement | null;
   const row = document.getElementById('board-row-mine');
@@ -170,6 +181,9 @@ export class Overlays {
   private menuBoardTab: 'survival' | 'boss' = 'survival';
   private menuSurvivalScores: ScoreRow[] = [];
   private menuBossScores: BossScoreRow[] = [];
+  /** How-to-play modal open on the landing page. */
+  private howtoOpen = false;
+  private howtoEscHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(game: Game, opts: { onHideVeil: () => void; onShowVeil: () => void }) {
     this.game = game;
@@ -195,6 +209,13 @@ export class Overlays {
     });
   }
 
+  /** Close how-to modal if open. Returns true when it consumed the action. */
+  closeHowtoIfOpen(): boolean {
+    if (!this.howtoOpen) return false;
+    this.closeHowto();
+    return true;
+  }
+
   show(): void {
     this.veil.classList.remove('hide');
     this.onShowVeil();
@@ -209,6 +230,7 @@ export class Overlays {
   async menuPanel(): Promise<void> {
     stopConfetti();
     this.selectingMode = false;
+    this.closeHowto();
     setMusicDucked(false);
     playMusic('menu');
     const [survival, boss] = await Promise.all([fetchTopScores(), fetchBossScores()]);
@@ -218,26 +240,65 @@ export class Overlays {
     const scores = tab === 'boss' ? boss : survival;
     this.panel.innerHTML = `
       <h1 class="glyph logo">HYPERGON</h1>
-      <div class="keys">
-        <div class="key"><b>MOVE</b><span>Arrow keys &nbsp;/&nbsp; WASD &nbsp;/&nbsp; left stick</span></div>
-        <div class="key"><b>AIM &amp; FIRE</b><span>Mouse position + hold click &nbsp;/&nbsp; right stick. F locks auto-fire.</span></div>
-        <div class="key"><b>SHOCKWAVE</b><span>Space or right-click - clears the board</span></div>
-        <div class="key"><b>SWAP WEAPON</b><span>Q / E through anything you're carrying</span></div>
-        <div class="key"><b>PICKUPS</b><span>Hexagons are weapons. Stars are powers.</span></div>
-        <div class="key"><b>MULTIPLIER</b><span>Cyan cores raise it. Dying resets it.</span></div>
-      </div>
       ${boardBlock(tab, scores, undefined, { tabs: true })}
-      <button class="cta" id="go" type="button" data-sfx="launch">Launch</button>
-      <p class="fine">P pause · M mute · F auto-fire</p>`;
+      <div class="cta-stack">
+        <button class="cta" id="go" type="button" data-sfx="launch">Launch</button>
+        <button class="cta secondary" id="howto" type="button">How to play</button>
+      </div>
+      <p class="fine">P pause · M mute · F auto-fire</p>
+      <div class="howto-modal hide" id="howto-modal" role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
+        <div class="howto-card">
+          <h2 class="glyph howto-title" id="howto-title">How to play</h2>
+          ${howToPlayKeysHtml()}
+          <button class="cta secondary" id="howto-close" type="button">Got it</button>
+        </div>
+      </div>`;
     this.show();
     this.bindMenuBoardTabs();
     document.getElementById('go')!.onclick = () => {
+      this.closeHowto();
       resumeAudio();
       SFX.launch();
       unlockMusic();
       playMusic('menu');
       this.modeSelectPanel();
     };
+    document.getElementById('howto')!.onclick = () => this.openHowto();
+    const modal = document.getElementById('howto-modal');
+    modal?.addEventListener('click', (e) => {
+      if (e.target === modal) this.closeHowto();
+    });
+    document.getElementById('howto-close')!.onclick = () => this.closeHowto();
+  }
+
+  private openHowto(): void {
+    const modal = document.getElementById('howto-modal');
+    if (!modal) return;
+    this.howtoOpen = true;
+    modal.classList.remove('hide');
+    modal.hidden = false;
+    document.getElementById('howto-close')?.focus();
+    if (!this.howtoEscHandler) {
+      this.howtoEscHandler = (e: KeyboardEvent) => {
+        if (e.code !== 'Escape' || !this.howtoOpen) return;
+        e.preventDefault();
+        this.closeHowto();
+      };
+      window.addEventListener('keydown', this.howtoEscHandler, true);
+    }
+  }
+
+  private closeHowto(): void {
+    this.howtoOpen = false;
+    const modal = document.getElementById('howto-modal');
+    if (modal) {
+      modal.classList.add('hide');
+      modal.hidden = true;
+    }
+    if (this.howtoEscHandler) {
+      window.removeEventListener('keydown', this.howtoEscHandler, true);
+      this.howtoEscHandler = null;
+    }
   }
 
   private bindMenuBoardTabs(): void {
@@ -265,6 +326,7 @@ export class Overlays {
 
   modeSelectPanel(): void {
     stopConfetti();
+    this.closeHowto();
     this.game.state = 'menu';
     this.selectingMode = true;
     resumeAudio();
