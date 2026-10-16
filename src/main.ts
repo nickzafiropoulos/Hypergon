@@ -87,16 +87,18 @@ function updateOrientHint(): void {
 updateOrientHint();
 addEventListener('resize', updateOrientHint);
 
-void overlays.menuPanel().finally(() => {
+overlays.menuPanel();
+{
   const boot = document.getElementById('boot');
-  if (!boot) return;
-  requestAnimationFrame(() => {
-    boot.classList.add('done');
-    const remove = () => boot.remove();
-    boot.addEventListener('transitionend', remove, { once: true });
-    setTimeout(remove, 500);
-  });
-});
+  if (boot) {
+    requestAnimationFrame(() => {
+      boot.classList.add('done');
+      const remove = () => boot.remove();
+      boot.addEventListener('transitionend', remove, { once: true });
+      setTimeout(remove, 500);
+    });
+  }
+}
 
 function unlockAudioOnce(): void {
   resumeAudio();

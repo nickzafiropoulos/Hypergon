@@ -22,12 +22,6 @@ import { WarpGrid } from './grid';
 import { depthScale, flipScale } from './depth';
 import { BossDirector } from './BossDirector';
 import { AdventureDirector } from './AdventureDirector';
-import {
-  beatGameSession,
-  clearSessionToken,
-  startGameSession,
-  type GameModeLb,
-} from '../leaderboard/supabase';
 import { angDiff, clamp, len, lerp, norm, pick, rnd, TAU } from './maths';
 import { pushParticle, ringFx, spark, explode } from './particles';
 import type {
@@ -58,7 +52,6 @@ export type GameOverFn = (stats: {
   kills: number;
   elapsed: number;
   sector: number;
-  autofire: boolean;
   mode: GameMode;
 }) => void;
 export type VictoryFn = GameOverFn;
@@ -109,8 +102,6 @@ export class Game {
   /** Consecutive kill chain for floating score size. */
   hitChain = 0;
   hitChainT = 0;
-  /** Seconds since last leaderboard session heartbeat. */
-  sessionBeatT = 0;
 
   score = 0;
   best = loadBest();
@@ -145,7 +136,6 @@ export class Game {
   droneAng = 0;
   gemBank = 0;
   droneCd = [0, 0];
-  usedAutofire = false;
   gemHintShown = false;
   gemHint: { gem: Gem; life: number; max: number; x: number; y: number } | null = null;
   attractT = 0;
@@ -208,7 +198,6 @@ export class Game {
         this.toast(m ? 'MUTED' : 'SOUND ON', '', 420);
       },
       onAutofire: () => {
-        if (this.input.autofire) this.usedAutofire = true;
         this.toast(
           this.input.autofire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF',
           '',
@@ -270,8 +259,6 @@ export class Game {
     this.razorAng = 0;
     this.hitChain = 0;
     this.hitChainT = 0;
-    this.sessionBeatT = 0;
-    clearSessionToken();
     this.score = 0;
     this.mult = 1;
     this.lives = 3;
@@ -287,7 +274,6 @@ export class Game {
     this.beam = null;
     this.shieldHits = 0;
     this.gemBank = 0;
-    this.usedAutofire = false;
     this.input.autofire = false;
     this.gemHintShown = false;
     this.gemHint = null;
@@ -320,11 +306,6 @@ export class Game {
     } else {
       playMusic('survival');
       this.toast('SECTOR 01', this.sectorName(1), 1500, '#63f7ff');
-    }
-    if (this.mode !== 'adventure') {
-      void startGameSession(this.mode as GameModeLb).then((ok) => {
-        if (ok) void this.pulseSession();
-      });
     }
   }
 
@@ -486,24 +467,6 @@ export class Game {
     };
   }
 
-  private sessionStats() {
-    return {
-      mode: (this.mode === 'adventure' ? 'survival' : this.mode) as GameModeLb,
-      score: this.score,
-      kills: this.kills,
-      sector: this.sector,
-      bosses_killed:
-        this.mode === 'boss' || this.mode === 'adventure' ? this.bosses.cleared : 0,
-      elapsed: this.elapsed,
-      autofire: this.usedAutofire,
-    };
-  }
-
-  private pulseSession(): Promise<boolean> {
-    this.sessionBeatT = 0;
-    return beatGameSession(this.sessionStats());
-  }
-
   togglePause(): void {
     if (this.state === 'play') {
       this.state = 'paused';
@@ -540,7 +503,6 @@ export class Game {
   gameOver(): void {
     this.state = 'over';
     playMusic('menu');
-    if (this.mode !== 'adventure') void this.pulseSession();
     if (this.score > this.best) {
       this.best = this.score;
       try {
@@ -561,7 +523,6 @@ export class Game {
             this.mode === 'boss' || this.mode === 'adventure'
               ? this.bosses.cleared
               : this.sector,
-          autofire: this.usedAutofire,
           mode: this.mode,
         });
       }
@@ -572,7 +533,6 @@ export class Game {
     if (this.state !== 'play') return;
     this.state = 'win';
     playMusic('menu');
-    if (this.mode !== 'adventure') void this.pulseSession();
     if (this.score > this.best) {
       this.best = this.score;
       try {
@@ -590,7 +550,6 @@ export class Game {
           kills: this.kills,
           elapsed: this.elapsed,
           sector: 20,
-          autofire: this.usedAutofire,
           mode: 'boss',
         });
       }
@@ -1279,8 +1238,6 @@ export class Game {
         this.hitChainT = 0;
       }
     }
-    this.sessionBeatT += dt;
-    if (this.mode !== 'adventure' && this.sessionBeatT >= 5) void this.pulseSession();
     const ets = this.buffs.timewarp > 0 ? 0.32 : 1;
     for (const k of Object.keys(this.buffs) as (keyof typeof this.buffs)[]) {
       if (this.buffs[k] > 0) this.buffs[k] = Math.max(0, this.buffs[k] - dt);

@@ -49,7 +49,7 @@ export class InputSystem {
 
   private bind(): void {
     addEventListener('keydown', (e) => {
-      // Let callsign / form fields receive letters (Q/E/WASD/etc. are game binds).
+      // Let text fields receive letters (Q/E/WASD/etc. are game binds).
       if (isTypingTarget(e.target)) return;
 
       const block = [
